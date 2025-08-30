@@ -1,0 +1,6 @@
+services:
+  n8naistarterkitqoder:
+    image: n8naistarterkitqoder
+    build:
+      context: .
+      dockerfile: ./Dockerfile
