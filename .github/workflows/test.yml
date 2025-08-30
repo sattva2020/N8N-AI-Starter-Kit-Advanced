@@ -26,15 +26,15 @@ jobs:
       - name: Validate basic profiles
         run: |
           chmod +x scripts/test-profiles.sh
-          ./scripts/test-profiles.sh basic --dry-run --verbose
+          ./scripts/test-profiles.sh basic --verbose
           
       - name: Validate extended profiles
         run: |
-          ./scripts/test-profiles.sh extended --dry-run --verbose
+          ./scripts/test-profiles.sh extended --verbose
           
       - name: Validate production profiles
         run: |
-          ./scripts/test-profiles.sh production --dry-run --verbose
+          ./scripts/test-profiles.sh production --verbose
 
   unit-tests:
     name: Unit Tests
@@ -60,7 +60,7 @@ jobs:
           ./test-runner.sh unit
           
       - name: Upload test results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: unit-test-results
@@ -95,7 +95,7 @@ jobs:
           ./scripts/run-comprehensive-tests.sh integration --timeout 600
           
       - name: Upload test results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: integration-test-results
@@ -138,7 +138,7 @@ jobs:
           docker compose logs --tail=100 > startup-logs-${{ strategy.job-index }}.txt
           
       - name: Upload logs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: startup-logs-${{ strategy.job-index }}
@@ -154,8 +154,16 @@ jobs:
         
       - name: Run security audit
         run: |
-          chmod +x scripts/maintenance/monitor.sh
-          ./scripts/maintenance/monitor.sh security --dry-run
+          # Basic security checks without external dependencies
+          echo "Running basic security checks..."
+          
+          # Check for potential secrets in files
+          if find . -name "*.env" -not -path "./.env.test" -not -path "./template.env" | head -1 | grep -q .; then
+            echo "Warning: Found .env files that should not be committed"
+            exit 1
+          fi
+          
+          echo "Security checks passed"
           
       - name: Check for secrets in code
         run: |
@@ -181,7 +189,10 @@ jobs:
         uses: actions/checkout@v4
         
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+        continue-on-error: true
         
       - name: Generate comprehensive report
         run: |
@@ -199,7 +210,7 @@ jobs:
           echo "- Security Tests: ${{ needs.security-tests.result }}" >> final-report/README.md
           
       - name: Upload comprehensive report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: comprehensive-test-report
           path: final-report/

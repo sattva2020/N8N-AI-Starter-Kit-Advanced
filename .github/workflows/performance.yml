@@ -166,7 +166,7 @@ jobs:
           fi
           
       - name: Upload performance results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: performance-test-results
@@ -273,7 +273,7 @@ jobs:
           fi
           
       - name: Upload stress test results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: stress-test-results
