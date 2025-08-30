@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Documents - N8N AI Starter Kit{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="fas fa-file-alt"></i> Document Management
+        </h1>
+    </div>
+</div>
+
+<!-- Upload Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-upload"></i> Upload Documents
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    Document upload functionality will be integrated with the document-processor service.
+                    For now, use the N8N workflows to process documents.
+                </div>
+                <a href="http://n8n.localhost" target="_blank" class="btn btn-primary">
+                    <i class="fas fa-external-link-alt"></i> Open N8N Interface
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Documents List -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-list"></i> Documents
+                </h5>
+                <button class="btn btn-sm btn-outline-primary" onclick="loadDocuments()">
+                    <i class="fas fa-sync"></i> Refresh
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="documents-table">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Document Details Modal -->
+<div class="modal fade" id="documentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Document Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modal-content">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPage = 0;
+const pageSize = 20;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadDocuments();
+});
+
+async function loadDocuments(page = 0) {
+    try {
+        const response = await fetch(`/api/v1/documents?limit=${pageSize}&offset=${page * pageSize}`);
+        const documents = await response.json();
+        
+        const container = document.getElementById('documents-table');
+        
+        if (documents.length === 0 && page === 0) {
+            container.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-file-alt fa-3x mb-3"></i>
+                    <h5>No documents found</h5>
+                    <p>Upload documents through N8N workflows to see them here.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = `
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Processed</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        
+        documents.forEach(doc => {
+            const statusBadge = doc.status === 'processed' ? 'success' : 
+                               doc.status === 'processing' ? 'warning' : 
+                               doc.status === 'error' ? 'danger' : 'secondary';
+            
+            const createdAt = new Date(doc.created_at).toLocaleDateString();
+            const processedAt = doc.processed_at ? 
+                new Date(doc.processed_at).toLocaleDateString() : '-';
+            
+            html += `
+                <tr>
+                    <td>
+                        <i class="fas fa-file-alt me-2"></i>
+                        ${doc.filename}
+                    </td>
+                    <td>
+                        <span class="badge bg-${statusBadge}">${doc.status}</span>
+                    </td>
+                    <td>${createdAt}</td>
+                    <td>${processedAt}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info" onclick="viewDocument('${doc.id}')">
+                            <i class="fas fa-eye"></i> View
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        html += '</tbody></table></div>';
+        
+        // Add pagination if needed
+        if (documents.length === pageSize) {
+            html += `
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        ${page > 0 ? `<li class="page-item"><button class="page-link" onclick="loadDocuments(${page - 1})">Previous</button></li>` : ''}
+                        <li class="page-item active"><span class="page-link">${page + 1}</span></li>
+                        <li class="page-item"><button class="page-link" onclick="loadDocuments(${page + 1})">Next</button></li>
+                    </ul>
+                </nav>
+            `;
+        }
+        
+        container.innerHTML = html;
+        currentPage = page;
+        
+    } catch (error) {
+        console.error('Failed to load documents:', error);
+        document.getElementById('documents-table').innerHTML = 
+            '<div class="alert alert-danger">Failed to load documents. Please try again.</div>';
+    }
+}
+
+async function viewDocument(documentId) {
+    try {
+        const response = await fetch(`/api/v1/documents/${documentId}`);
+        const document = await response.json();
+        
+        const statusBadge = document.status === 'processed' ? 'success' : 
+                           document.status === 'processing' ? 'warning' : 
+                           document.status === 'error' ? 'danger' : 'secondary';
+        
+        const modalContent = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Basic Information</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <th>ID:</th>
+                            <td><code>${document.id}</code></td>
+                        </tr>
+                        <tr>
+                            <th>Filename:</th>
+                            <td>${document.filename}</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td><span class="badge bg-${statusBadge}">${document.status}</span></td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Timestamps</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Created:</th>
+                            <td>${new Date(document.created_at).toLocaleString()}</td>
+                        </tr>
+                        <tr>
+                            <th>Processed:</th>
+                            <td>${document.processed_at ? new Date(document.processed_at).toLocaleString() : 'Not processed'}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="mt-3">
+                <h6>Actions</h6>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-primary" onclick="reprocessDocument('${document.id}')">
+                        <i class="fas fa-redo"></i> Reprocess
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" onclick="downloadDocument('${document.id}')">
+                        <i class="fas fa-download"></i> Download
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('modal-content').innerHTML = modalContent;
+        
+        const modal = new bootstrap.Modal(document.getElementById('documentModal'));
+        modal.show();
+        
+    } catch (error) {
+        console.error('Failed to load document details:', error);
+        alert('Failed to load document details. Please try again.');
+    }
+}
+
+function reprocessDocument(documentId) {
+    // This would integrate with the document-processor service
+    alert('Reprocessing functionality will be implemented with the document-processor service integration.');
+}
+
+function downloadDocument(documentId) {
+    // This would implement document download
+    alert('Download functionality will be implemented with proper document storage integration.');
+}
+</script>
+{% endblock %}

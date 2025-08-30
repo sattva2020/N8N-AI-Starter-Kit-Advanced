@@ -2,9 +2,9 @@ name: Comprehensive Testing Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, developer ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, developer ]
   workflow_dispatch:
 
 env:

@@ -1,0 +1,13 @@
+This is a test document for automated testing purposes.
+
+It contains multiple paragraphs to test document processing functionality.
+
+The document includes various types of content:
+- Text processing capabilities
+- Integration testing scenarios  
+- API endpoint validation
+- Workflow automation testing
+
+This content should be processed by the document processor service and made searchable through the vector database integration.
+
+The test verifies end-to-end functionality of the N8N AI Starter Kit system.

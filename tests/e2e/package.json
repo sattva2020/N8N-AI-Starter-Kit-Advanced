@@ -1,0 +1,18 @@
+{
+  "name": "n8n-ai-starter-kit-e2e-tests",
+  "version": "1.0.0",
+  "description": "End-to-end tests for N8N AI Starter Kit using Playwright",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report",
+    "install:browsers": "playwright install"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  },
+  "keywords": ["n8n", "playwright", "e2e", "testing", "automation"],
+  "author": "N8N AI Starter Kit Team",
+  "license": "MIT"
+}

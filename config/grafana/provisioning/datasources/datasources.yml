@@ -1,0 +1,50 @@
+# =============================================================================
+# N8N AI STARTER KIT - GRAFANA DATASOURCE PROVISIONING
+# =============================================================================
+
+apiVersion: 1
+
+datasources:
+  # Prometheus datasource
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: "15s"
+      queryTimeout: "60s"
+      httpMethod: "POST"
+    version: 1
+
+  # PostgreSQL datasource for analytics
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: n8n
+    user: n8n_user
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
+    jsonData:
+      sslmode: "disable"
+      postgresVersion: 1500
+      timescaledb: false
+    editable: true
+    version: 1
+
+  # ClickHouse datasource (if analytics profile is enabled)
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    url: http://clickhouse:8123
+    database: n8n_analytics
+    user: app_user
+    secureJsonData:
+      password: ${CLICKHOUSE_PASSWORD}
+    jsonData:
+      defaultDatabase: n8n_analytics
+      defaultTable: workflow_executions
+    editable: true
+    version: 1
