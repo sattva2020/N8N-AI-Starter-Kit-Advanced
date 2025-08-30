@@ -39,7 +39,8 @@ except ImportError:
     
     @app.get("/metrics")
     async def mock_metrics():
-        return "# TYPE lightrag_requests_total counter\nlightrag_requests_total 10\n"
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse("# TYPE lightrag_requests_total counter\nlightrag_requests_total 10\n", media_type="text/plain")
     
     @app.post("/documents/ingest")
     async def mock_ingest(doc: DocumentIngest):

@@ -29,7 +29,8 @@ except ImportError:
     
     @app.get("/metrics")
     async def mock_metrics():
-        return "# TYPE test_metric counter\ntest_metric 1\n"
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse("# TYPE test_metric counter\ntest_metric 1\n", media_type="text/plain")
     
     @app.get("/etl/jobs")
     async def mock_jobs_list():
