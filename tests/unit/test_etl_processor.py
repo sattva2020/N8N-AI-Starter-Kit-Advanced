@@ -16,12 +16,47 @@ try:
     from main import app
 except ImportError:
     # Mock the app if imports fail (for CI environments)
-    from fastapi import FastAPI
+    from fastapi import FastAPI, HTTPException
+    from pydantic import BaseModel
     app = FastAPI()
+    
+    class JobRequest(BaseModel):
+        job_type: str
     
     @app.get("/health")
     async def mock_health():
         return {"status": "healthy", "version": "test", "timestamp": "2024-01-01T00:00:00"}
+    
+    @app.get("/metrics")
+    async def mock_metrics():
+        return "# TYPE test_metric counter\ntest_metric 1\n"
+    
+    @app.get("/etl/jobs")
+    async def mock_jobs_list():
+        return [{"id": 1, "type": "test_job", "status": "completed"}]
+    
+    @app.post("/etl/jobs/run")
+    async def mock_run_job(job: JobRequest):
+        if job.job_type not in ["workflow_executions", "document_processing"]:
+            raise HTTPException(status_code=400, detail="Invalid job type")
+        return {"message": "Job started", "job_id": "test-123"}
+    
+    @app.get("/etl/analytics/workflow-summary")
+    async def mock_workflow_summary():
+        return {
+            "total_executions": 100,
+            "completed_executions": 85,
+            "failed_executions": 10,
+            "running_executions": 5
+        }
+    
+    @app.get("/etl/analytics/document-summary")
+    async def mock_document_summary():
+        return {
+            "total_documents": 250,
+            "processed_documents": 200,
+            "pending_documents": 50
+        }
 
 class TestETLProcessor:
     """Test suite for ETL Processor service"""

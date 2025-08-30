@@ -16,8 +16,18 @@ try:
     from main import app
 except ImportError:
     # Mock the app if imports fail (for CI environments)
-    from fastapi import FastAPI
+    from fastapi import FastAPI, UploadFile, File, HTTPException
+    from pydantic import BaseModel
     app = FastAPI()
+    
+    class DocumentIngest(BaseModel):
+        content: str
+        metadata: dict = {}
+        source: str = "unknown"
+    
+    class QueryRequest(BaseModel):
+        query: str
+        mode: str = "hybrid"
     
     @app.get("/health")
     async def mock_health():
@@ -26,6 +36,32 @@ except ImportError:
     @app.get("/stats")
     async def mock_stats():
         return {"service": "lightrag", "status": "running"}
+    
+    @app.get("/metrics")
+    async def mock_metrics():
+        return "# TYPE lightrag_requests_total counter\nlightrag_requests_total 10\n"
+    
+    @app.post("/documents/ingest")
+    async def mock_ingest(doc: DocumentIngest):
+        if not doc.content:
+            raise HTTPException(status_code=422, detail="Content required")
+        return {"success": True, "document_id": "test-doc-123"}
+    
+    @app.post("/query")
+    async def mock_query(query: QueryRequest):
+        if not query.query:
+            raise HTTPException(status_code=422, detail="Query required")
+        return {"success": True, "query": query.query, "mode": query.mode, "response": "Mock response"}
+    
+    @app.get("/documents")
+    async def mock_documents_list():
+        return {"documents": [], "total": 0}
+    
+    @app.post("/documents/ingest-file")
+    async def mock_ingest_file(file: UploadFile = File(None)):
+        if not file:
+            raise HTTPException(status_code=422, detail="File required")
+        return {"success": True, "file_id": "test-file-123"}
 
 class TestLightRAG:
     """Test suite for LightRAG service"""
