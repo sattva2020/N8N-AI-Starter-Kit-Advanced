@@ -16,7 +16,7 @@ try:
     from main import app
 except ImportError:
     # Mock the app if imports fail (for CI environments)
-    from fastapi import FastAPI, UploadFile, File, HTTPException
+    from fastapi import FastAPI, HTTPException
     from pydantic import BaseModel
     app = FastAPI()
     
@@ -58,10 +58,9 @@ except ImportError:
         return {"documents": [], "total": 0}
     
     @app.post("/documents/ingest-file")
-    async def mock_ingest_file(file: UploadFile = File(None)):
-        if not file:
-            raise HTTPException(status_code=422, detail="File required")
-        return {"success": True, "file_id": "test-file-123"}
+    async def mock_ingest_file():
+        # Mock file upload without UploadFile to avoid multipart dependency
+        raise HTTPException(status_code=422, detail="File required")
 
 class TestLightRAG:
     """Test suite for LightRAG service"""

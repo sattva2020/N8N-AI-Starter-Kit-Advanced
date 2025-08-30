@@ -17,8 +17,7 @@ try:
     from main import app, DocumentProcessor
 except ImportError:
     # Mock the app if imports fail (for CI environments)
-    from fastapi import FastAPI
-    from fastapi import UploadFile, File
+    from fastapi import FastAPI, HTTPException
     app = FastAPI()
     
     @app.get("/health")
@@ -30,16 +29,15 @@ except ImportError:
         return "# TYPE test_metric counter\ntest_metric 1\n"
     
     @app.post("/docs/upload")
-    async def mock_upload(file: UploadFile = File(None)):
-        if not file:
-            return {"error": "No file provided"}, 422
-        return {"message": "File uploaded successfully"}
+    async def mock_upload():
+        # Mock upload without UploadFile to avoid multipart dependency
+        raise HTTPException(status_code=422, detail="No file provided")
     
     @app.post("/docs/search")
     async def mock_search(data: dict):
         if "query" not in data:
-            return {"error": "Query required"}, 422
-        return {"error": "Search service not available"}, 503
+            raise HTTPException(status_code=422, detail="Query required")
+        raise HTTPException(status_code=503, detail="Search service not available")
     
     class DocumentProcessor:
         @staticmethod
