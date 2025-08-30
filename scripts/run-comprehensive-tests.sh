@@ -144,8 +144,8 @@ LIGHTRAG_CHUNK_SIZE=1200
 LIGHTRAG_OVERLAP_SIZE=100
 
 # Optional API Keys (empty for testing)
-OPENAI_API_KEY=
-OPENAI_API_BASE=
+OPENAI_API_KEY=""
+OPENAI_API_BASE=""
 
 # ClickHouse (for analytics profile)
 CLICKHOUSE_HOST=clickhouse
@@ -167,10 +167,38 @@ EOF
     fi
     
     print_info "Starting test services..."
-    # Source the test environment file
-    set -a  # automatically export all variables
-    source "$ENV_FILE"
-    set +a  # turn off automatic export
+    # Source the test environment file with proper error handling
+    if [[ -f "$ENV_FILE" ]]; then
+        # Temporarily disable 'set -u' for sourcing and validate content
+        set +u
+        set -a  # automatically export all variables
+        
+        # Check if the environment file is properly formatted
+        if ! bash -n "$ENV_FILE" 2>/dev/null; then
+            print_error "Environment file has syntax errors: $ENV_FILE"
+            return 1
+        fi
+        
+        # Source with error handling
+        if ! source "$ENV_FILE" 2>/dev/null; then
+            print_error "Failed to source environment file: $ENV_FILE"
+            return 1
+        fi
+        
+        set +a  # turn off automatic export
+        set -u  # re-enable unset variable checking
+        
+        # Validate critical variables are set
+        if [[ -z "${DOMAIN:-}" ]]; then
+            print_error "Critical variable DOMAIN is not set"
+            return 1
+        fi
+        
+        print_success "Environment loaded successfully from $ENV_FILE"
+    else
+        print_error "Environment file not found: $ENV_FILE"
+        return 1
+    fi
     
     ./start.sh up --profile default,developer,monitoring --detach
     
