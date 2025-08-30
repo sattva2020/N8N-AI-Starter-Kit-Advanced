@@ -1,0 +1,282 @@
+name: Performance Testing
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM
+  workflow_dispatch:
+    inputs:
+      test_duration:
+        description: 'Test duration in minutes'
+        required: false
+        default: '10'
+        type: string
+      target_profile:
+        description: 'Target profile for testing'
+        required: false
+        default: 'default,developer,monitoring'
+        type: string
+
+env:
+  TEST_DURATION: ${{ github.event.inputs.test_duration || '10' }}
+  TARGET_PROFILE: ${{ github.event.inputs.target_profile || 'default,developer,monitoring' }}
+
+jobs:
+  performance-baseline:
+    name: Performance Baseline Testing
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Install K6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+          
+      - name: Setup performance test environment
+        run: |
+          cp template.env .env
+          sed -i 's/change_this_password_123/perf_test_password_123/g' .env
+          sed -i 's/change_this_secret_456/perf_test_secret_456/g' .env
+          
+      - name: Start services for performance testing
+        run: |
+          chmod +x start.sh
+          ./start.sh up --profile "$TARGET_PROFILE" --detach
+          
+      - name: Wait for services to be ready
+        run: |
+          timeout 300 bash -c '
+            while ! curl -f -s http://localhost:8000/health >/dev/null 2>&1; do
+              echo "Waiting for services..."
+              sleep 10
+            done
+          '
+          
+      - name: Create K6 performance test script
+        run: |
+          mkdir -p k6-tests
+          cat > k6-tests/load-test.js << 'EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          import { Rate } from 'k6/metrics';
+          
+          export let errorRate = new Rate('errors');
+          
+          export let options = {
+            stages: [
+              { duration: '2m', target: 10 },   // Ramp up
+              { duration: '5m', target: 20 },   // Stay at 20 users
+              { duration: '2m', target: 0 },    // Ramp down
+            ],
+            thresholds: {
+              http_req_duration: ['p(95)<500'],  // 95% of requests under 500ms
+              errors: ['rate<0.1'],              // Error rate under 10%
+            },
+          };
+          
+          export default function() {
+            // Test Web Interface health endpoint
+            let response1 = http.get('http://localhost:8000/health');
+            check(response1, {
+              'Web Interface health status is 200': (r) => r.status === 200,
+              'Web Interface response time < 200ms': (r) => r.timings.duration < 200,
+            }) || errorRate.add(1);
+            
+            // Test Document Processor health endpoint
+            let response2 = http.get('http://localhost:8001/health');
+            check(response2, {
+              'Document Processor health status is 200': (r) => r.status === 200,
+              'Document Processor response time < 200ms': (r) => r.timings.duration < 200,
+            }) || errorRate.add(1);
+            
+            // Test ETL Processor health endpoint  
+            let response3 = http.get('http://localhost:8002/health');
+            check(response3, {
+              'ETL Processor health status is 200': (r) => r.status === 200,
+              'ETL Processor response time < 200ms': (r) => r.timings.duration < 200,
+            }) || errorRate.add(1);
+            
+            // Test N8N health endpoint
+            let response4 = http.get('http://localhost:5678/healthz');
+            check(response4, {
+              'N8N health status is 200': (r) => r.status === 200,
+            }) || errorRate.add(1);
+            
+            sleep(1);
+          }
+          EOF
+          
+      - name: Run performance tests
+        run: |
+          k6 run k6-tests/load-test.js --duration ${TEST_DURATION}m --out json=k6-results.json
+          
+      - name: Generate performance report
+        run: |
+          mkdir -p performance-results
+          
+          echo "# Performance Test Report" > performance-results/report.md
+          echo "**Date:** $(date)" >> performance-results/report.md
+          echo "**Profile:** $TARGET_PROFILE" >> performance-results/report.md
+          echo "**Duration:** ${TEST_DURATION} minutes" >> performance-results/report.md
+          echo "" >> performance-results/report.md
+          
+          # Extract key metrics from K6 JSON output
+          if [ -f k6-results.json ]; then
+            echo "## Key Metrics" >> performance-results/report.md
+            echo '```' >> performance-results/report.md
+            tail -1 k6-results.json | jq -r '
+              "Average Response Time: " + (.metrics.http_req_duration.values.avg | tostring) + "ms",
+              "95th Percentile: " + (.metrics.http_req_duration.values["p(95)"] | tostring) + "ms", 
+              "Requests Per Second: " + (.metrics.http_reqs.values.rate | tostring),
+              "Error Rate: " + ((.metrics.errors.values.rate // 0) * 100 | tostring) + "%"
+            ' >> performance-results/report.md
+            echo '```' >> performance-results/report.md
+          fi
+          
+      - name: Check performance thresholds
+        run: |
+          # Fail if performance is below acceptable thresholds
+          if [ -f k6-results.json ]; then
+            ERROR_RATE=$(tail -1 k6-results.json | jq -r '.metrics.errors.values.rate // 0')
+            P95_TIME=$(tail -1 k6-results.json | jq -r '.metrics.http_req_duration.values["p(95)"]')
+            
+            echo "Error rate: $ERROR_RATE"
+            echo "95th percentile response time: ${P95_TIME}ms"
+            
+            # Check thresholds
+            if (( $(echo "$ERROR_RATE > 0.1" | bc -l) )); then
+              echo "❌ Error rate too high: $ERROR_RATE > 0.1"
+              exit 1
+            fi
+            
+            if (( $(echo "$P95_TIME > 1000" | bc -l) )); then
+              echo "❌ Response time too slow: ${P95_TIME}ms > 1000ms"
+              exit 1  
+            fi
+            
+            echo "✅ Performance thresholds passed"
+          fi
+          
+      - name: Upload performance results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: performance-test-results
+          path: |
+            performance-results/
+            k6-results.json
+
+  stress-testing:
+    name: Stress Testing
+    runs-on: ubuntu-latest
+    needs: [performance-baseline]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx  
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Install K6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+          
+      - name: Setup stress test environment
+        run: |
+          cp template.env .env
+          sed -i 's/change_this_password_123/stress_test_password_123/g' .env
+          sed -i 's/change_this_secret_456/stress_test_secret_456/g' .env
+          
+      - name: Start services for stress testing
+        run: |
+          chmod +x start.sh  
+          ./start.sh up --profile "$TARGET_PROFILE" --detach
+          
+      - name: Wait for services to be ready
+        run: |
+          timeout 300 bash -c '
+            while ! curl -f -s http://localhost:8000/health >/dev/null 2>&1; do
+              echo "Waiting for services..."
+              sleep 10
+            done
+          '
+          
+      - name: Create K6 stress test script
+        run: |
+          mkdir -p k6-tests
+          cat > k6-tests/stress-test.js << 'EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          
+          export let options = {
+            stages: [
+              { duration: '1m', target: 50 },   // Quick ramp up to 50 users
+              { duration: '3m', target: 100 },  // Scale to 100 users  
+              { duration: '1m', target: 150 },  // Peak at 150 users
+              { duration: '2m', target: 0 },    // Quick ramp down
+            ],
+          };
+          
+          export default function() {
+            let responses = http.batch([
+              ['GET', 'http://localhost:8000/health'],
+              ['GET', 'http://localhost:8001/health'], 
+              ['GET', 'http://localhost:8002/health'],
+              ['GET', 'http://localhost:5678/healthz'],
+            ]);
+            
+            check(responses[0], { 'Web Interface survived stress': (r) => r.status === 200 });
+            check(responses[1], { 'Document Processor survived stress': (r) => r.status === 200 });
+            check(responses[2], { 'ETL Processor survived stress': (r) => r.status === 200 });
+            check(responses[3], { 'N8N survived stress': (r) => r.status === 200 });
+            
+            sleep(0.5);
+          }
+          EOF
+          
+      - name: Run stress tests
+        run: |
+          k6 run k6-tests/stress-test.js --out json=stress-results.json
+          
+      - name: Generate stress test report
+        run: |
+          mkdir -p stress-results
+          
+          echo "# Stress Test Report" > stress-results/report.md
+          echo "**Date:** $(date)" >> stress-results/report.md
+          echo "**Profile:** $TARGET_PROFILE" >> stress-results/report.md
+          echo "" >> stress-results/report.md
+          
+          if [ -f stress-results.json ]; then
+            echo "## Stress Test Results" >> stress-results/report.md
+            echo '```' >> stress-results/report.md
+            tail -1 stress-results.json | jq -r '
+              "Peak Users: 150",
+              "Total Requests: " + (.metrics.http_reqs.values.count | tostring),
+              "Failed Requests: " + (.metrics.http_req_failed.values.count | tostring),
+              "Average Response Time: " + (.metrics.http_req_duration.values.avg | tostring) + "ms"
+            ' >> stress-results/report.md
+            echo '```' >> stress-results/report.md
+          fi
+          
+      - name: Upload stress test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: stress-test-results
+          path: |
+            stress-results/
+            stress-results.json
