@@ -179,8 +179,8 @@ check_profile_health() {
     
     # Define health check endpoints
     declare -A HEALTH_ENDPOINTS
-    HEALTH_ENDPOINTS[traefik]="http://localhost:8080/ping"
-    HEALTH_ENDPOINTS[n8n]="http://localhost:5678/healthz"
+    HEALTH_ENDPOINTS[traefik]="http://localhost:8080/api/rawdata"
+    HEALTH_ENDPOINTS[n8n]="http://localhost:5678/"
     HEALTH_ENDPOINTS[web-interface]="http://localhost:8000/health"
     HEALTH_ENDPOINTS[document-processor]="http://localhost:8001/health"
     HEALTH_ENDPOINTS[document-processor-gpu]="http://localhost:8011/health"
@@ -316,6 +316,22 @@ PROFILE_SETS[production]="default|default,monitoring|default,developer,monitorin
 # Main execution
 main() {
     cd "$PROJECT_ROOT"
+    
+    # Load environment variables
+    if [[ -f ".env" ]]; then
+        set -a
+        source .env
+        set +a
+        print_info "Environment loaded from .env"
+    elif [[ -f "template.env" ]]; then
+        print_warning "No .env file found, copying from template.env"
+        cp template.env .env
+        set -a
+        source .env
+        set +a
+    else
+        print_warning "No environment file found, using defaults"
+    fi
     
     print_header "N8N AI Starter Kit - Profile Testing"
     print_info "Profile set: $PROFILE_SET"

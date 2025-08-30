@@ -69,3 +69,6 @@ Thumbs.db
 # Certificates (should be auto-generated)
 certificates/
 acme.json
+
+# AI
+ai-instructions

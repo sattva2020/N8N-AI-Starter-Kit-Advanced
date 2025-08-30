@@ -6,7 +6,17 @@
 
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgvector";
+
+-- Try to create pgvector extension, but don't fail if it's not available
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS "pgvector";
+EXCEPTION
+    WHEN undefined_file THEN
+        RAISE NOTICE 'pgvector extension is not available, skipping vector functionality';
+END
+$$;
+
 CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
 
 -- Create schemas
@@ -32,15 +42,33 @@ CREATE TABLE IF NOT EXISTS documents.document_store (
 );
 
 -- Create embeddings table for vector storage
-CREATE TABLE IF NOT EXISTS documents.embeddings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    document_id UUID REFERENCES documents.document_store(id) ON DELETE CASCADE,
-    chunk_index INTEGER NOT NULL,
-    chunk_text TEXT NOT NULL,
-    chunk_metadata JSONB DEFAULT '{}',
-    embedding VECTOR(384), -- Dimension for sentence-transformers/all-MiniLM-L6-v2
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+DO $$
+BEGIN
+    -- Try to create table with vector column if pgvector is available
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pgvector') THEN
+        CREATE TABLE IF NOT EXISTS documents.embeddings (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            document_id UUID REFERENCES documents.document_store(id) ON DELETE CASCADE,
+            chunk_index INTEGER NOT NULL,
+            chunk_text TEXT NOT NULL,
+            chunk_metadata JSONB DEFAULT '{}',
+            embedding VECTOR(384), -- Dimension for sentence-transformers/all-MiniLM-L6-v2
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+    ELSE
+        -- Create table without vector column if pgvector is not available
+        CREATE TABLE IF NOT EXISTS documents.embeddings (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            document_id UUID REFERENCES documents.document_store(id) ON DELETE CASCADE,
+            chunk_index INTEGER NOT NULL,
+            chunk_text TEXT NOT NULL,
+            chunk_metadata JSONB DEFAULT '{}',
+            embedding_data TEXT, -- Store as text fallback
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+    END IF;
+END
+$$;
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_document_store_created_at ON documents.document_store(created_at);
@@ -48,7 +76,15 @@ CREATE INDEX IF NOT EXISTS idx_document_store_status ON documents.document_store
 CREATE INDEX IF NOT EXISTS idx_document_store_metadata ON documents.document_store USING GIN(metadata);
 
 CREATE INDEX IF NOT EXISTS idx_embeddings_document_id ON documents.embeddings(document_id);
-CREATE INDEX IF NOT EXISTS idx_embeddings_embedding ON documents.embeddings USING ivfflat (embedding vector_cosine_ops);
+
+-- Create vector index only if pgvector is available
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pgvector') THEN
+        CREATE INDEX IF NOT EXISTS idx_embeddings_embedding ON documents.embeddings USING ivfflat (embedding vector_cosine_ops);
+    END IF;
+END
+$$;
 
 -- Create analytics tables
 CREATE TABLE IF NOT EXISTS analytics.workflow_executions (

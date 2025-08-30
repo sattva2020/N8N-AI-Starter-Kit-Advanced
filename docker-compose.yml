@@ -65,7 +65,7 @@ services:
       
       # API and Dashboard
       - --api.dashboard=true
-      - --api.insecure=false
+      - --api.insecure=true
       
       # Entry points
       - --entrypoints.web.address=:80
@@ -92,6 +92,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "8080:8080"
     
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -119,7 +120,7 @@ services:
       - "traefik.http.middlewares.security-headers.headers.customResponseHeaders.Content-Security-Policy=default-src 'self'"
 
     healthcheck:
-      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/rawdata"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -196,6 +197,9 @@ services:
       # Timezone
       TZ: UTC
     
+    ports:
+      - "5678:5678"
+    
     volumes:
       - ./data/n8n:/home/node/.n8n
     
@@ -214,7 +218,7 @@ services:
       - "traefik.http.routers.n8n.middlewares=security-headers@docker"
     
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5678/"]
       interval: 30s
       timeout: 10s
       retries: 3
