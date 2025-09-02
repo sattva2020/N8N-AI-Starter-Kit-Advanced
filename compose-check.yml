@@ -1,0 +1,25 @@
+version: '3.8'
+
+# =============================================================================
+# N8N AI STARTER KIT - COMPOSE VALIDATION
+# =============================================================================
+# This file is used for validating Docker Compose configuration
+# without actually starting services. Run: docker compose -f compose-check.yml config
+
+services:
+  # Minimal service for configuration validation
+  config-check:
+    image: alpine:latest
+    container_name: n8n-config-check
+    command: echo "Configuration validation successful"
+    environment:
+      # Test all environment variables are properly substituted
+      DOMAIN: ${DOMAIN}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      GRAFANA_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      N8N_DOMAIN: ${N8N_DOMAIN}
+      GRAFANA_DOMAIN: ${GRAFANA_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}

@@ -2,7 +2,7 @@ name: Docker Build & Deploy
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, developer ]
     tags: [ 'v*' ]
   release:
     types: [ published ]
@@ -96,7 +96,7 @@ jobs:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: [integration-test-images]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/developer'
     environment: staging
     
     steps:

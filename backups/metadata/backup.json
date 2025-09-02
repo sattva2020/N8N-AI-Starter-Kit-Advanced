@@ -1,0 +1,10 @@
+{
+  "backup_system": {
+    "version": "1.0",
+    "created": "$(date -Iseconds)",
+    "retention_days": 30,
+    "compression": "gzip",
+    "encryption": false
+  },
+  "backups": []
+}

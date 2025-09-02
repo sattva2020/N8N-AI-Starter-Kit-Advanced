@@ -1,0 +1,268 @@
+{
+  "name": "AI Starter Kit - Service Integration Demo",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "/health",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "webhook-trigger"
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "postgres",
+        "operation": "executeQuery",
+        "query": "SELECT NOW() as current_time, 'N8N AI Starter Kit' as system_name",
+        "options": {}
+      },
+      "name": "PostgreSQL Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        460,
+        200
+      ],
+      "id": "postgres-query",
+      "credentials": {
+        "postgres": {
+          "id": "{{ credentials['PostgreSQL - Main Database'].id }}",
+          "name": "PostgreSQL - Main Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "requestMethod": "GET",
+        "url": "http://qdrant:6333/collections",
+        "options": {}
+      },
+      "name": "Qdrant Collections",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        460,
+        400
+      ],
+      "id": "qdrant-collections",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{ credentials['Qdrant - Vector Database'].id }}",
+          "name": "Qdrant - Vector Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "http://lightrag:8003/query",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"query\": \"What is the current system status?\",\n  \"mode\": \"hybrid\"\n}",
+        "options": {}
+      },
+      "name": "LightRAG Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        680,
+        200
+      ],
+      "id": "lightrag-query",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{ credentials['LightRAG API'].id }}",
+          "name": "LightRAG API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "http://ollama:11434/api/generate",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"model\": \"{{ $('Set Variables').item.json['ollama_model'] || 'llama3.3:8b' }}\",\n  \"prompt\": \"Hello, how are you today?\",\n  \"stream\": false\n}",
+        "options": {}
+      },
+      "name": "Ollama Generate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        680,
+        400
+      ],
+      "id": "ollama-generate",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{ credentials['Ollama - Local LLM Server'].id }}",
+          "name": "Ollama - Local LLM Server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "system_status",
+              "value": "operational"
+            },
+            {
+              "name": "timestamp",
+              "value": "{{ new Date().toISOString() }}"
+            },
+            {
+              "name": "ollama_model",
+              "value": "{{ $env['OLLAMA_DEFAULT_MODEL'] || 'llama3.3:8b' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ],
+      "id": "set-variables"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate results from all service calls\nconst results = {\n  timestamp: new Date().toISOString(),\n  system_status: 'healthy',\n  services: {}\n};\n\n// PostgreSQL result\nif ($input('PostgreSQL Query').all().length > 0) {\n  const pgData = $input('PostgreSQL Query').first().json;\n  results.services.postgresql = {\n    status: 'connected',\n    current_time: pgData.current_time,\n    system_name: pgData.system_name\n  };\n}\n\n// Qdrant result\nif ($input('Qdrant Collections').all().length > 0) {\n  const qdrantData = $input('Qdrant Collections').first().json;\n  results.services.qdrant = {\n    status: 'connected',\n    collections: qdrantData.result?.collections || []\n  };\n}\n\n// LightRAG result\nif ($input('LightRAG Query').all().length > 0) {\n  const lightragData = $input('LightRAG Query').first().json;\n  results.services.lightrag = {\n    status: 'connected',\n    response: lightragData.answer || lightragData\n  };\n}\n\n// Ollama result\nif ($input('Ollama Generate').all().length > 0) {\n  const ollamaData = $input('Ollama Generate').first().json;\n  results.services.ollama = {\n    status: 'connected',\n    model: ollamaData.model,\n    response: ollamaData.response\n  };\n}\n\nreturn results;"
+      },
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "id": "aggregate-results"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ],
+      "id": "webhook-response"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Variables": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL Query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Qdrant Collections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL Query": {
+      "main": [
+        [
+          {
+            "node": "LightRAG Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Collections": {
+      "main": [
+        [
+          {
+            "node": "Ollama Generate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LightRAG Query": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Generate": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

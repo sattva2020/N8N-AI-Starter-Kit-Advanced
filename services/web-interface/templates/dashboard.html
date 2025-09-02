@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - N8N AI Starter Kit{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="fas fa-tachometer-alt"></i> Dashboard
+        </h1>
+    </div>
+</div>
+
+<!-- System Status Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body">
+                <h5 class="card-title text-success">
+                    <i class="fas fa-database"></i> Database
+                </h5>
+                <h3 class="text-success">
+                    <span id="db-status">Loading...</span>
+                </h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-body">
+                <h5 class="card-title text-info">
+                    <i class="fas fa-robot"></i> N8N
+                </h5>
+                <h3 class="text-info">
+                    <span id="n8n-status">Loading...</span>
+                </h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-body">
+                <h5 class="card-title text-warning">
+                    <i class="fas fa-search"></i> Qdrant
+                </h5>
+                <h3 class="text-warning">
+                    <span id="qdrant-status">Loading...</span>
+                </h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body">
+                <h5 class="card-title text-primary">
+                    <i class="fas fa-chart-line"></i> Monitoring
+                </h5>
+                <h3 class="text-primary">
+                    <span id="monitoring-status">Loading...</span>
+                </h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt"></i> Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-2">
+                        <a href="http://n8n.localhost" target="_blank" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-robot"></i> Open N8N Interface
+                        </a>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <a href="http://grafana.localhost" target="_blank" class="btn btn-outline-success w-100">
+                            <i class="fas fa-chart-line"></i> Open Grafana
+                        </a>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <a href="/ui/documents" class="btn btn-outline-info w-100">
+                            <i class="fas fa-file-alt"></i> Manage Documents
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-clock"></i> Recent Documents
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="recent-documents">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-bar"></i> System Metrics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="system-metrics">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Load dashboard data
+document.addEventListener('DOMContentLoaded', function() {
+    loadSystemStatus();
+    loadRecentDocuments();
+    loadSystemMetrics();
+    
+    // Refresh every 30 seconds
+    setInterval(() => {
+        loadSystemStatus();
+        loadSystemMetrics();
+    }, 30000);
+    
+    // Refresh recent documents every 60 seconds
+    setInterval(loadRecentDocuments, 60000);
+});
+
+async function loadSystemStatus() {
+    try {
+        const response = await fetch('/status');
+        const data = await response.json();
+        
+        // Update status indicators
+        document.getElementById('db-status').textContent = data.database === 'healthy' ? '✓' : '✗';
+        document.getElementById('n8n-status').textContent = data.services.n8n === 'healthy' ? '✓' : '✗';
+        document.getElementById('qdrant-status').textContent = data.services.qdrant === 'healthy' ? '✓' : '✗';
+        document.getElementById('monitoring-status').textContent = data.services.grafana === 'healthy' ? '✓' : '✗';
+        
+    } catch (error) {
+        console.error('Failed to load system status:', error);
+        document.getElementById('db-status').textContent = '?';
+        document.getElementById('n8n-status').textContent = '?';
+        document.getElementById('qdrant-status').textContent = '?';
+        document.getElementById('monitoring-status').textContent = '?';
+    }
+}
+
+async function loadRecentDocuments() {
+    try {
+        const response = await fetch('/api/v1/documents?limit=5');
+        const documents = await response.json();
+        
+        const container = document.getElementById('recent-documents');
+        
+        if (documents.length === 0) {
+            container.innerHTML = '<p class="text-muted">No documents found</p>';
+            return;
+        }
+        
+        let html = '<div class="list-group list-group-flush">';
+        documents.forEach(doc => {
+            const statusBadge = doc.status === 'processed' ? 'success' : 
+                               doc.status === 'processing' ? 'warning' : 'secondary';
+            
+            html += `
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1">${doc.filename}</h6>
+                        <small class="text-muted">${new Date(doc.created_at).toLocaleDateString()}</small>
+                    </div>
+                    <span class="badge bg-${statusBadge}">${doc.status}</span>
+                </div>
+            `;
+        });
+        html += '</div>';
+        
+        container.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Failed to load recent documents:', error);
+        document.getElementById('recent-documents').innerHTML = 
+            '<p class="text-danger">Failed to load documents</p>';
+    }
+}
+
+async function loadSystemMetrics() {
+    try {
+        const response = await fetch('/status');
+        const data = await response.json();
+        
+        const metricsHtml = `
+            <div class="row text-center">
+                <div class="col-4">
+                    <h4>${data.metrics.uptime_seconds}</h4>
+                    <small class="text-muted">Uptime (sec)</small>
+                </div>
+                <div class="col-4">
+                    <h4>${data.metrics.total_requests}</h4>
+                    <small class="text-muted">Total Requests</small>
+                </div>
+                <div class="col-4">
+                    <h4>${(data.metrics.error_rate * 100).toFixed(2)}%</h4>
+                    <small class="text-muted">Error Rate</small>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('system-metrics').innerHTML = metricsHtml;
+        
+    } catch (error) {
+        console.error('Failed to load system metrics:', error);
+        document.getElementById('system-metrics').innerHTML = 
+            '<p class="text-danger">Failed to load metrics</p>';
+    }
+}
+</script>
+{% endblock %}

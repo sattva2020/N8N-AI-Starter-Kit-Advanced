@@ -1,0 +1,30 @@
+{
+  "timestamp": 1756562252,
+  "date": "2025-08-30T16:57:56+03:00",
+  "system": {
+    "cpu_usage": ,
+    "memory_usage": ,
+    "disk_usage": 215081068
+  },
+  "services": {
+    "prometheus": {"status":"down","response_time":0}
+,
+    "lightrag": {"status":"down","response_time":0}
+,
+    "grafana": {"status":"down","response_time":0}
+,
+    "n8n": {"status":"down","response_time":0}
+,
+    "document-processor": {"status":"down","response_time":0}
+,
+    "traefik": {"status":"down","response_time":0}
+,
+    "web-interface": {"status":"down","response_time":0}
+,
+    "qdrant": {"status":"down","response_time":0}
+,
+    "etl-processor": {"status":"down","response_time":0}
+  },
+  "docker_stats": "CONTAINER      CPU %     MEM USAGE / LIMIT     MEM %     NET I/O           BLOCK I/O
+74ead08d2891   0.51%     4.957MiB / 27.37GiB   0.02%     23.2kB / 1.26kB   283kB / 0B"
+}
