@@ -509,6 +509,43 @@ list_services() {
     echo "Default services: $DEFAULT_SERVICES"
 }
 
+# Function to show setup instructions
+show_setup_instructions() {
+    echo "N8N AI Starter Kit - Credential Setup Instructions"
+    echo "=================================================="
+    echo
+    echo "📋 Available Services:"
+    list_services
+    echo
+    echo "✅ Automatic Setup Options:"
+    echo "  1. Setup all default services:"
+    echo "     $0"
+    echo
+    echo "  2. Setup specific services:"
+    echo "     $0 --services postgres,qdrant,openai"
+    echo
+    echo "  3. Force recreate all credentials:"
+    echo "     $0 --force"
+    echo
+    echo "  4. Dry run to see what would be created:"
+    echo "     $0 --dry-run"
+    echo
+    echo "⚠️  Prerequisites:"
+    echo "  • N8N must be running (check with: ../start.sh status)"
+    echo "  • Environment variables must be set in .env file"
+    echo "  • Valid N8N authentication token or API key required"
+    echo
+    echo "🔐 Authentication:"
+    echo "  Set one of these environment variables in your .env file:"
+    echo "    N8N_PERSONAL_ACCESS_TOKEN=your_token_here"
+    echo "    N8N_API_KEY=your_api_key_here"
+    echo
+    echo "💡 Tips:"
+    echo "  • Wait 1-2 minutes after starting services before running this script"
+    echo "  • Existing credentials are skipped by default (use --force to overwrite)"
+    echo "  • Check the logs if you encounter issues: ../start.sh logs n8n"
+}
+
 # Main function
 main() {
     local services="$DEFAULT_SERVICES"
@@ -516,6 +553,7 @@ main() {
     local force=false
     local skip_existing=true
     local check_auth_only=false
+    local show_instructions=false
     
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -545,6 +583,10 @@ main() {
                 check_auth_only=true
                 shift
                 ;;
+            --instructions)
+                show_instructions=true
+                shift
+                ;;
             --help|-h)
                 print_usage
                 exit 0
@@ -556,6 +598,12 @@ main() {
                 ;;
         esac
     done
+    
+    # Show instructions if requested
+    if [[ "$show_instructions" == "true" ]]; then
+        show_setup_instructions
+        exit 0
+    fi
     
     print_header
     

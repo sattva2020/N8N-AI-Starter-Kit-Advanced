@@ -88,41 +88,20 @@ generate_api_key() {
     openssl rand -hex "$length"
 }
 
-# Function to generate passwords and update .env
-generate_passwords() {
-    print_info "Generating secure passwords..."
-    
-    # Generate secure passwords
-    local postgres_password=$(generate_password 32)
-    local qdrant_key=$(generate_api_key 32)
-    local grafana_password=$(generate_password 24)
-    local clickhouse_password=$(generate_password 28)
-    local n8n_token=$(generate_api_key 40)
-    local n8n_api_key=$(generate_api_key 32)
-    
-    # Update passwords in .env file
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
-        sed -i '' "s/change_this_secure_password_123/${postgres_password}/g" "$ENV_FILE"
-        sed -i '' "s/change_this_qdrant_key_456/${qdrant_key}/g" "$ENV_FILE"
-        sed -i '' "s/change_this_grafana_password_789/${grafana_password}/g" "$ENV_FILE"
-        sed -i '' "s/change_this_clickhouse_password_012/${clickhouse_password}/g" "$ENV_FILE"
-        sed -i '' "s/change_this_n8n_token_123/${n8n_token}/g" "$ENV_FILE"
-        sed -i '' "s/change_this_n8n_api_key_456/${n8n_api_key}/g" "$ENV_FILE"
+# Function to hash password for Traefik basic auth
+hash_traefik_password() {
+    local password="$1"
+    # Use htpasswd to generate the hash (if available)
+    if command -v htpasswd >/dev/null 2>&1; then
+        htpasswd -nb admin "$password" | cut -d: -f2
     else
-        # Linux/Windows Git Bash
-        sed -i "s/change_this_secure_password_123/${postgres_password}/g" "$ENV_FILE"
-        sed -i "s/change_this_qdrant_key_456/${qdrant_key}/g" "$ENV_FILE"
-        sed -i "s/change_this_grafana_password_789/${grafana_password}/g" "$ENV_FILE"
-        sed -i "s/change_this_clickhouse_password_012/${clickhouse_password}/g" "$ENV_FILE"
-        sed -i "s/change_this_n8n_token_123/${n8n_token}/g" "$ENV_FILE"
-        sed -i "s/change_this_n8n_api_key_456/${n8n_api_key}/g" "$ENV_FILE"
+        # Fallback: use openssl to generate a simple hash
+        # Note: This is not as secure as htpasswd but works for basic needs
+        echo -n "$password" | openssl passwd -apr1 -stdin
     fi
-    
-    print_success "Generated and applied secure passwords"
 }
 
-# Function to prompt for domain configuration
+# Function to configure domain settings
 configure_domain() {
     print_info "Configuring domain settings..."
     
@@ -130,6 +109,7 @@ configure_domain() {
     read -p "Enter your domain name (or press Enter for localhost): " domain
     domain=${domain:-localhost}
     
+    # Update DOMAIN and related variables
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS
         sed -i '' "s/DOMAIN=localhost/DOMAIN=${domain}/g" "$ENV_FILE"
@@ -139,6 +119,69 @@ configure_domain() {
     fi
     
     print_success "Domain configured: $domain"
+}
+
+# Function to configure Let's Encrypt email
+configure_letsencrypt_email() {
+    print_info "Configuring Let's Encrypt email..."
+    
+    # Only prompt for email if domain is not localhost
+    local domain=$(grep "^DOMAIN=" "$ENV_FILE" | cut -d'=' -f2)
+    
+    if [[ "$domain" != "localhost" ]]; then
+        local email
+        read -p "Enter your email for Let's Encrypt notifications (or press Enter for admin@${domain}): " email
+        email=${email:-"admin@${domain}"}
+        
+        # Escape special characters for sed
+        local escaped_email=$(printf '%s\n' "$email" | sed -e 's/[\/&]/\\&/g')
+        
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            sed -i '' "s/ACME_EMAIL=admin@\${DOMAIN}/ACME_EMAIL=${escaped_email}/g" "$ENV_FILE"
+        else
+            # Linux/Windows Git Bash
+            sed -i "s/ACME_EMAIL=admin@\${DOMAIN}/ACME_EMAIL=${escaped_email}/g" "$ENV_FILE"
+        fi
+        
+        print_success "Let's Encrypt email configured: $email"
+    else
+        print_info "Using localhost - Let's Encrypt not needed"
+    fi
+}
+
+# Function to prompt for Traefik dashboard password
+configure_traefik_password() {
+    print_info "Configuring Traefik dashboard password..."
+    
+    local traefik_password
+    
+    read -p "Enter password for Traefik dashboard (or press Enter to generate): " traefik_password
+    
+    if [[ -z "$traefik_password" ]]; then
+        # Generate a secure password if none provided
+        traefik_password=$(generate_password 20)
+        print_info "Generated Traefik dashboard password: $traefik_password"
+        print_warning "Please save this password - you'll need it to access the Traefik dashboard"
+    fi
+    
+    # Hash the password for Traefik
+    local hashed_password=$(hash_traefik_password "$traefik_password")
+    
+    # Update the Traefik password in .env file
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        sed -i '' "s/change_this_traefik_password/${traefik_password}/g" "$ENV_FILE"
+        # Update the hashed password for Traefik config
+        sed -i '' "s/change_this_traefik_hashed_password/${hashed_password}/g" "$ENV_FILE"
+    else
+        # Linux/Windows Git Bash
+        sed -i "s/change_this_traefik_password/${traefik_password}/g" "$ENV_FILE"
+        # Update the hashed password for Traefik config
+        sed -i "s/change_this_traefik_hashed_password/${hashed_password}/g" "$ENV_FILE"
+    fi
+    
+    print_success "Traefik dashboard password configured"
 }
 
 # Function to configure compose profiles
@@ -151,6 +194,7 @@ configure_profiles() {
     echo "  - monitoring: + Grafana, Prometheus"
     echo "  - analytics: + ETL Processor, ClickHouse"
     echo "  - gpu: + GPU-accelerated AI services with local models"
+    echo "  - supabase: + Supabase integration for AI/analytics data"
     echo
     
     local profiles
@@ -168,6 +212,47 @@ configure_profiles() {
     print_success "Profiles configured: $profiles"
 }
 
+# Function to generate API keys
+generate_api_keys() {
+    print_info "API Keys Configuration..."
+    
+    # Note: API keys are not automatically generated for security reasons
+    # Users should manually add their own API keys to the .env file
+    print_info "Please manually add your API keys to the .env file:"
+    print_info "  - OPENAI_API_KEY (for LightRAG service)"
+    print_info "  - QDRANT_API_KEY (for vector database authentication)"
+    print_info "  - N8N_API_KEY (alternative to Personal Access Token)"
+    print_info "These fields are intentionally left empty for security."
+}
+
+# Function to generate passwords and update .env
+generate_passwords() {
+    print_info "Generating secure passwords..."
+    
+    # Generate secure passwords (excluding Traefik passwords which are handled separately)
+    local postgres_password=$(generate_password 32)
+    local grafana_password=$(generate_password 24)
+    local clickhouse_password=$(generate_password 28)
+    local n8n_token=$(generate_api_key 40)
+    
+    # Update passwords in .env file (excluding Traefik passwords)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        sed -i '' "s/change_this_secure_password_123/${postgres_password}/g" "$ENV_FILE"
+        sed -i '' "s/change_this_grafana_password_789/${grafana_password}/g" "$ENV_FILE"
+        sed -i '' "s/change_this_clickhouse_password_012/${clickhouse_password}/g" "$ENV_FILE"
+        sed -i '' "s/change_this_n8n_token_123/${n8n_token}/g" "$ENV_FILE"
+    else
+        # Linux/Windows Git Bash
+        sed -i "s/change_this_secure_password_123/${postgres_password}/g" "$ENV_FILE"
+        sed -i "s/change_this_grafana_password_789/${grafana_password}/g" "$ENV_FILE"
+        sed -i "s/change_this_clickhouse_password_012/${clickhouse_password}/g" "$ENV_FILE"
+        sed -i "s/change_this_n8n_token_123/${n8n_token}/g" "$ENV_FILE"
+    fi
+    
+    print_success "Generated and applied secure passwords"
+}
+
 # Function to validate environment file
 validate_env() {
     print_info "Validating environment configuration..."
@@ -181,11 +266,11 @@ validate_env() {
     # Check for placeholder values that weren't replaced
     local placeholders=(
         "change_this_secure_password"
-        "change_this_qdrant_key"
         "change_this_grafana_password"
         "change_this_clickhouse_password"
         "change_this_n8n_token"
-        "change_this_n8n_api_key"
+        # Note: We're intentionally not checking for API key placeholders
+        # as they should remain empty until user adds their own keys
     )
     
     local validation_failed=false
@@ -212,12 +297,33 @@ display_summary() {
     echo "  ✓ Secure passwords generated"
     echo "  ✓ Configuration validated"
     echo
+    print_warning "IMPORTANT: Please add your API keys to the .env file:"
+    print_warning "  - OPENAI_API_KEY (for LightRAG service)"
+    print_warning "  - QDRANT_API_KEY (for vector database authentication)"
+    print_warning "  - N8N_API_KEY (alternative to Personal Access Token)"
+    echo
     print_info "Next steps:"
-    echo "  1. Review .env file and adjust settings if needed"
-    echo "  2. Run: ./start.sh"
-    echo "  3. Or run: docker compose up -d"
+    echo "  1. Review .env file and add your API keys"
+    echo "  2. Adjust other settings if needed"
+    echo "  3. Run: ./start.sh"
+    echo "  4. Or run: docker compose up -d"
     echo
     print_warning "Keep your .env file secure and do not commit it to version control!"
+}
+
+# Function to set default values for non-interactive mode
+set_default_values_non_interactive() {
+    print_info "Setting default values for non-interactive mode..."
+    
+    # For production environments, we might want to prompt for a real domain
+    # But in non-interactive mode, we'll stick with localhost
+    # Users can manually edit the .env file if they want to change this
+    
+    # We could also check if we're in a CI/CD environment or have other hints
+    # about whether this is a production setup
+    
+    print_info "Using localhost as default domain in non-interactive mode"
+    print_info "To use a custom domain, run setup in interactive mode or edit .env manually"
 }
 
 # Main setup function
@@ -256,10 +362,14 @@ main() {
     # Check if .env already exists
     if [[ -f "$ENV_FILE" && "$force" != "true" ]]; then
         echo "Environment file already exists: $ENV_FILE"
-        read -p "Do you want to overwrite it? (y/N): " confirm
-        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-            print_info "Setup cancelled"
-            exit 0
+        if [[ "$interactive" == "true" ]]; then
+            read -p "Do you want to overwrite it? (y/N): " confirm
+            if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+                print_info "Setup cancelled"
+                exit 0
+            fi
+        else
+            print_info "Overwriting existing .env file in non-interactive mode"
         fi
     fi
     
@@ -267,11 +377,22 @@ main() {
     check_dependencies
     backup_existing_env
     copy_template
-    generate_passwords
     
+    # Generate passwords and API keys
+    generate_passwords
+    generate_api_keys
+    
+    # Configure domain and profiles based on mode
     if [[ "$interactive" == "true" ]]; then
         configure_domain
+        configure_letsencrypt_email
+        configure_traefik_password
         configure_profiles
+    else
+        # In non-interactive mode, we still want to ensure proper configuration
+        set_default_values_non_interactive
+        # We could add logic here to detect if we're likely in a production environment
+        # and prompt for a domain accordingly, but for now we'll keep it simple
     fi
     
     validate_env

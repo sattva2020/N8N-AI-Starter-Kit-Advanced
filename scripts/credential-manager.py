@@ -348,6 +348,7 @@ class CredentialManager:
         
         # Show available services
         print(f"\n{Colors.BLUE}Available services:{Colors.NC}")
+        service_list = list(self.service_configs.keys())
         for i, (service, config) in enumerate(self.service_configs.items(), 1):
             print(f"  {i}. {service} - {config.get('description', 'No description')}")
         
@@ -361,8 +362,7 @@ class CredentialManager:
             if user_input.lower() == 'all':
                 selected_services = list(self.service_configs.keys())
             else:
-                indices = [int(x.strip()) - 1 for x in user_input.split(',')]
-                service_list = list(self.service_configs.keys())
+                indices = [int(x.strip()) - 1 for x in user_input.split(',') if x.strip().isdigit()]
                 selected_services = [service_list[i] for i in indices if 0 <= i < len(service_list)]
             
             if not selected_services:
@@ -383,6 +383,35 @@ class CredentialManager:
         except (ValueError, IndexError, KeyboardInterrupt):
             print(f"\n{Colors.RED}✗{Colors.NC} Invalid input or setup cancelled")
             return False
+
+    def show_setup_instructions(self):
+        """Show detailed setup instructions"""
+        print(f"{Colors.CYAN}N8N AI Starter Kit - Credential Setup Instructions{Colors.NC}")
+        print("=" * 55)
+        print("\n📋 Available Services:")
+        for service, config in self.service_configs.items():
+            print(f"  • {service}: {config.get('description', 'No description')}")
+        
+        print(f"\n{Colors.GREEN}✓{Colors.NC} Automatic Setup Options:")
+        print("  1. Setup all services:")
+        print("     python3 credential-manager.py --setup all")
+        print("\n  2. Setup specific services:")
+        print("     python3 credential-manager.py --setup postgres,qdrant,openai")
+        print("\n  3. Interactive setup:")
+        print("     python3 credential-manager.py --interactive")
+        
+        print(f"\n{Colors.YELLOW}⚠{Colors.NC} Prerequisites:")
+        print("  • N8N must be running (check with: ../start.sh status)")
+        print("  • Environment variables must be set in .env file")
+        print("  • Valid N8N authentication token or API key required")
+        
+        print(f"\n{Colors.BLUE}ℹ{Colors.NC} Authentication:")
+        print("  Set one of these environment variables:")
+        print("    N8N_PERSONAL_ACCESS_TOKEN=your_token_here")
+        print("    N8N_API_KEY=your_api_key_here")
+        print("\n  Or use command line arguments:")
+        print("    --token your_token_here")
+        print("    --api-key your_api_key_here")
 
 
 def main():
@@ -416,6 +445,8 @@ Examples:
                        help='Validate environment variables only')
     parser.add_argument('--test-connection', action='store_true',
                        help='Test API connection and exit')
+    parser.add_argument('--instructions', action='store_true',
+                       help='Show detailed setup instructions')
     
     # Options
     parser.add_argument('--force', action='store_true',
@@ -437,6 +468,11 @@ Examples:
     
     try:
         manager = CredentialManager(args.base_url, token, api_key)
+        
+        # Show instructions if requested
+        if args.instructions:
+            manager.show_setup_instructions()
+            return 0
         
         # Test connection
         if args.test_connection:
@@ -476,7 +512,11 @@ Examples:
             if args.setup.lower() == 'all':
                 services = list(manager.service_configs.keys())
             else:
-                services = [s.strip() for s in args.setup.split(',')]
+                services = [s.strip() for s in args.setup.split(',') if s.strip()]
+            
+            if not services:
+                print(f"{Colors.RED}✗{Colors.NC} No valid services specified")
+                return 1
             
             success = manager.setup_credentials(services, args.force, args.dry_run)
             return 0 if success else 1
@@ -486,8 +526,9 @@ Examples:
             return 0 if success else 1
         
         else:
-            parser.print_help()
-            return 1
+            # Show instructions by default if no action specified
+            manager.show_setup_instructions()
+            return 0
     
     except Exception as e:
         print(f"{Colors.RED}✗{Colors.NC} Error: {e}")

@@ -5,8 +5,10 @@
 
 # Internal/temporary artifacts
 .internal/
+.github/
 *.log
 *.pid
+backups/
 
 # Docker data
 postgres_data/
@@ -46,6 +48,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # IDE
+.vscode/
 .qoder/
 .idea/
 *.swp
@@ -60,6 +63,7 @@ yarn-error.log*
 .Trashes
 ehthumbs.db
 Thumbs.db
+*.exe
 
 # Backup files
 *.bak
@@ -72,3 +76,7 @@ acme.json
 
 # AI
 ai-instructions
+
+# Test
+test-results/
+tests/

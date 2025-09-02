@@ -5,6 +5,111 @@ All notable changes to the N8N AI Starter Kit project will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2025-08-31
+
+### Changed
+
+#### API Key Security Enhancement
+- **Manual API Key Configuration**: Changed API key handling to require manual user input for security
+  - OpenAI API Key for LightRAG service (must be manually added)
+  - Qdrant API Key for vector database authentication (must be manually added)
+  - N8N API Key as alternative to Personal Access Token (must be manually added)
+- **Enhanced Security**: API key fields in template.env are now empty by default
+- **User Guidance**: Updated setup script and documentation to inform users they must manually add API keys
+- **Documentation Updates**: README.md and other documentation updated to reflect new API key handling
+
+## [1.2.4] - 2025-08-31
+
+### Added
+
+#### Enhanced API Key Configuration
+- **Automatic API Key Generation**: Added automatic generation of secure placeholder API keys during setup
+  - OpenAI API Key for LightRAG service (64-character hex key)
+  - Qdrant API Key for vector database authentication (64-character hex key)
+  - N8N API Key as alternative to Personal Access Token (64-character hex key)
+- **Placeholder Keys**: All API keys are generated as secure placeholders that can be updated later
+- **Enhanced Documentation**: Updated README with API key configuration instructions
+
+### Enhanced
+
+#### Environment Setup
+- Improved setup script with automatic API key generation
+- Enhanced validation for environment variables
+- Better error handling for missing dependencies
+
+## [1.2.3] - 2025-08-31
+
+### Added
+
+#### Enhanced Security Configuration
+- **Traefik Dashboard Authentication**: Added basic authentication for Traefik dashboard with interactive password setup
+- **Let's Encrypt Email Configuration**: Interactive setup now prompts for Let's Encrypt email address
+- **Secure Password Generation**: Automatic generation of secure passwords for all services including Traefik dashboard
+- **Enhanced Documentation**: Updated `docs/DOMAIN-CONFIGURATION.md` with security best practices and dashboard access instructions
+
+### Enhanced
+
+#### Environment Setup
+- Improved interactive setup script with additional security prompts
+- Added Traefik dashboard password configuration with automatic hashing
+- Enhanced validation for environment variables
+- Better error handling for missing dependencies
+
+#### Docker Compose Configuration
+- Added basic authentication for Traefik dashboard
+- Improved security headers configuration
+- Updated middleware configuration for enhanced security
+
+## [1.2.2] - 2025-08-31
+
+### Added
+
+#### Enhanced Domain Configuration
+- **Interactive Domain Setup**: Improved setup script now prompts for domain configuration in interactive mode
+- **Production Deployment Guidance**: Added comprehensive domain configuration guide in `docs/DOMAIN-CONFIGURATION.md`
+- **Smart Domain Detection**: Startup script now detects localhost usage in production environments and offers to update domain configuration
+- **DNS and SSL Documentation**: Detailed instructions for DNS configuration and SSL certificate management
+
+### Enhanced
+
+#### Environment Setup
+- Improved domain configuration workflow with better user prompts
+- Enhanced validation for production deployments
+- Better handling of ACME email configuration based on domain
+- Updated README with domain configuration instructions
+
+## [1.2.1] - 2025-08-30
+
+### Added
+
+#### Supabase Integration (Hybrid Database Architecture)
+- **Hybrid Database Support**: Added Supabase integration for AI/analytics data storage
+  - Local PostgreSQL continues to handle core N8N application data
+  - Supabase manages AI/analytics data (document processing results, embeddings, knowledge graphs)
+  - Optimal separation of concerns and independent scalability
+
+- **Supabase Profile**: New Docker Compose profile for Supabase integration
+  - Enable with `COMPOSE_PROFILES=default,developer,monitoring,supabase`
+  - Optional cloud-based data storage for AI workloads
+  - Configurable through environment variables
+
+- **Configuration Files**:
+  - Updated `env.schema` with Supabase configuration variables
+  - Updated `template.env` with Supabase examples and documentation
+  - Updated `docker-compose.yml` with Supabase integration documentation
+
+- **Documentation**:
+  - New `docs/SUPABASE-INTEGRATION.md` guide with setup instructions
+  - Updated `README.md` with hybrid database architecture information
+  - Architecture diagram updates to show Supabase integration
+
+### Enhanced
+
+#### Environment Configuration
+- Added Supabase configuration variables to environment schema
+- Enhanced documentation for hybrid database approach
+- Improved profile management with Supabase option
+
 ## [1.2.0] - 2025-08-30
 
 ### Added

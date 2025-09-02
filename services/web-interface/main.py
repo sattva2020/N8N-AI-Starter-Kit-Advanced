@@ -8,7 +8,9 @@ Provides a user-friendly dashboard and API endpoints for system management.
 """
 
 import os
+import time
 import logging
+from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Dict, Any, List, Optional
 
@@ -20,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 import uvicorn
 
@@ -48,14 +51,18 @@ REQUEST_COUNT = Counter('web_interface_requests_total', 'Total requests', ['meth
 REQUEST_DURATION = Histogram('web_interface_request_duration_seconds', 'Request duration')
 
 # Configuration
-class Settings(BaseModel):
-    postgres_host: str = Field(default="postgres", env="POSTGRES_HOST")
-    postgres_port: int = Field(default=5432, env="POSTGRES_PORT")
-    postgres_db: str = Field(default="n8n", env="POSTGRES_DB")
-    postgres_user: str = Field(default="n8n_user", env="POSTGRES_USER")
-    postgres_password: str = Field(env="POSTGRES_PASSWORD")
-    log_level: str = Field(default="INFO", env="LOG_LEVEL")
-    debug: bool = Field(default=False, env="DEBUG")
+class Settings(BaseSettings):
+    postgres_host: str = Field(default="postgres", alias="POSTGRES_HOST")
+    postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
+    postgres_db: str = Field(default="n8n", alias="POSTGRES_DB")
+    postgres_user: str = Field(default="n8n_user", alias="POSTGRES_USER")
+    postgres_password: str = Field(alias="POSTGRES_PASSWORD")
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    debug: bool = Field(default=False, alias="DEBUG")
+    
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
 
 settings = Settings()
 
@@ -150,7 +157,7 @@ class DocumentInfo(BaseModel):
 # Middleware for metrics
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
-    start_time = REQUEST_DURATION.time()
+    start_time = time.time()
     
     response = await call_next(request)
     
@@ -160,7 +167,7 @@ async def metrics_middleware(request: Request, call_next):
         status=response.status_code
     ).inc()
     
-    start_time.observe()
+    REQUEST_DURATION.observe(time.time() - start_time)
     return response
 
 # Health check endpoint

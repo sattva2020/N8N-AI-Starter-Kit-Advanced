@@ -111,6 +111,10 @@ services:
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
       - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=traefik-auth"
+      
+      # Basic auth middleware
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_USER}:${TRAEFIK_DASHBOARD_HASHED_PASSWORD}"
       
       # Security headers middleware
       - "traefik.http.middlewares.security-headers.headers.customRequestHeaders.X-Forwarded-Proto=https"
@@ -120,7 +124,7 @@ services:
       - "traefik.http.middlewares.security-headers.headers.customResponseHeaders.Content-Security-Policy=default-src 'self'"
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/rawdata"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/rawdata"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -218,7 +222,7 @@ services:
       - "traefik.http.routers.n8n.middlewares=security-headers@docker"
     
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5678/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5678/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -248,7 +252,7 @@ services:
       - "6334:6334"
     
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -498,7 +502,7 @@ services:
       OPENAI_API_BASE: ${OPENAI_API_BASE}
       LIGHTRAG_PORT: ${LIGHTRAG_PORT}
       LIGHTRAG_WORKERS: ${LIGHTRAG_WORKERS}
-      LIGHTRAG_WORKING_DIR: /app/data/lightrag
+      LIGHTRAG_WORKING_DIR: ${LIGHTRAG_WORKING_DIR}
       LIGHTRAG_LLM_MODEL: ${LIGHTRAG_LLM_MODEL}
       LIGHTRAG_EMBEDDING_MODEL: ${LIGHTRAG_EMBEDDING_MODEL}
       LIGHTRAG_MAX_TOKENS: ${LIGHTRAG_MAX_TOKENS}
@@ -655,7 +659,7 @@ services:
       OPENAI_API_BASE: ${OPENAI_API_BASE}
       LIGHTRAG_PORT: ${LIGHTRAG_GPU_PORT:-8013}
       LIGHTRAG_WORKERS: ${LIGHTRAG_GPU_WORKERS:-1}
-      LIGHTRAG_WORKING_DIR: /app/data/lightrag
+      LIGHTRAG_WORKING_DIR: ${LIGHTRAG_WORKING_DIR}
       LIGHTRAG_LLM_MODEL: ${LIGHTRAG_GPU_LLM_MODEL:-microsoft/DialoGPT-medium}
       LIGHTRAG_EMBEDDING_MODEL: ${LIGHTRAG_GPU_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
       LIGHTRAG_MAX_TOKENS: ${LIGHTRAG_MAX_TOKENS}
@@ -785,3 +789,22 @@ services:
       timeout: 15s
       retries: 5
       start_period: 60s
+
+  # ===========================================================================
+  # SUPABASE SERVICE (Hybrid Approach - AI/Analytics Data)
+  # ===========================================================================
+  # Supabase is used for AI/analytics data storage while local PostgreSQL
+  # handles core N8N application data. This provides optimal separation
+  # of concerns and independent scalability.
+  #
+  # To use Supabase:
+  # 1. Create a Supabase project at https://app.supabase.com
+  # 2. Set SUPABASE_URL and SUPABASE_KEY in your .env file
+  # 3. Enable the supabase profile: COMPOSE_PROFILES=default,developer,monitoring,supabase
+  #
+  # Example .env configuration:
+  # SUPABASE_URL=https://your-project.supabase.co
+  # SUPABASE_KEY=your-anon-or-service-key
+
+# Volumes definitions
+# ...

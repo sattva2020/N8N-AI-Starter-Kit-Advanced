@@ -29,8 +29,8 @@ from pydantic_settings import BaseSettings
 import aiofiles
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from lightrag import LightRAG, QueryParam
-from lightrag.llm import gpt_4o_mini_complete, gpt_4o_complete
-from lightrag.embed import openai_embedding
+from lightrag.llm.openai import gpt_4o_mini_complete, gpt_4o_complete, openai_embed
+from lightrag.kg.shared_storage import initialize_pipeline_status
 import asyncpg
 
 # Import Ollama client
@@ -225,7 +225,7 @@ async def init_lightrag():
                     return await gpt_4o_mini_complete(prompt, system_prompt, history_messages, **kwargs)
             
             # Use OpenAI embedding function
-            embedding_func = openai_embedding
+            embedding_func = openai_embed
             
             logger.info(
                 "Using OpenAI models",

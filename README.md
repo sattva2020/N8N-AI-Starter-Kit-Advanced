@@ -31,6 +31,11 @@ That's it! The setup script will:
 3. Start all services with Docker Compose
 4. Display service URLs and credentials
 
+After deployment, the script will show:
+- All accessible services with their URLs
+- Instructions for automatic credential creation
+- Information about waiting for services to initialize
+
 ## 📋 What's Included
 
 ### Core Services
@@ -52,6 +57,13 @@ That's it! The setup script will:
 | **ETL Processor** | Data Pipeline & Analytics | https://api.localhost/etl | 8002 |
 | **LightRAG** | Graph-based RAG System | https://api.localhost/lightrag | 8003 |
 
+### Hybrid Database Architecture
+
+| Service | Purpose | Type | Usage |
+|---------|---------|------|-------|
+| **PostgreSQL** | Core N8N Data | Local | Workflows, credentials, execution history |
+| **Supabase** | AI/Analytics Data | Cloud | Document processing results, embeddings, AI analytics |
+
 ### Management Tools
 
 | Tool | Purpose | Location |
@@ -70,7 +82,7 @@ That's it! The setup script will:
 
 ## 🏗️ Architecture Overview
 
-```mermaid
+```
 graph TB
     subgraph "External Access"
         User[Users]
@@ -93,9 +105,10 @@ graph TB
     end
     
     subgraph "Data Layer"
-        Postgres[(PostgreSQL + pgvector)]
+        Postgres[(PostgreSQL + pgvector<br/>Local)]
         Qdrant[(Qdrant Vector DB)]
         ClickHouse[(ClickHouse<br/>Optional)]
+        Supabase[(Supabase<br/>Cloud - Optional)]
     end
     
     subgraph "Monitoring"
@@ -113,9 +126,12 @@ graph TB
     N8N --> Qdrant
     DocProc --> Qdrant
     DocProc --> Postgres
+    DocProc -.->|AI Data| Supabase
     ETLProc --> Postgres
     ETLProc --> ClickHouse
+    ETLProc -.->|Analytics| Supabase
     LightRAG --> Postgres
+    LightRAG -.->|Knowledge Graphs| Supabase
     
     Prometheus --> N8N
     Prometheus --> DocProc
@@ -148,6 +164,7 @@ Choose which services to run with Docker Compose profiles:
 - **`monitoring`**: + Grafana, Prometheus
 - **`analytics`**: + ETL Processor, ClickHouse
 - **`gpu`**: + GPU-accelerated AI services with local models
+- **`supabase`**: + Supabase integration for AI/analytics data (hybrid approach)
 
 ### Environment Configuration
 
@@ -155,7 +172,7 @@ All configuration is managed through environment variables. The setup script gen
 
 Key variables you might want to customize:
 
-```bash
+```
 # Domain configuration (change for production)
 DOMAIN=localhost
 ACME_EMAIL=admin@yourdomain.com
@@ -176,7 +193,60 @@ LIGHTRAG_EMBEDDING_MODEL=text-embedding-3-small
 # GPU settings (for gpu profile)
 GPU_TYPE=auto
 CUDA_VISIBLE_DEVICES=0
+
+# Supabase settings (for hybrid database approach)
+# SUPABASE_URL=https://your-project.supabase.co
+# SUPABASE_KEY=your-anon-or-service-key
+# COMPOSE_PROFILES=default,developer,monitoring,supabase
 ```
+
+### Interactive Domain Configuration
+
+When running the setup script, you'll be prompted to enter your domain name:
+
+```bash
+./scripts/setup.sh
+```
+
+The script will ask:
+```
+Enter your domain name (or press Enter for localhost):
+```
+
+For production deployments, enter your real domain name (e.g., `example.com`). For local development, you can press Enter to use `localhost`.
+
+If you're running `./start.sh` and have an existing configuration with `localhost`, the script will detect this and offer to update it:
+
+```
+⚠ Currently using localhost as domain
+ℹ For production deployments, you should use a real domain name
+
+Would you like to update the domain now? (y/N):
+```
+
+### Security Configuration
+
+The setup script also prompts for additional security configuration:
+
+1. **Let's Encrypt Email**: For SSL certificate notifications
+2. **Traefik Dashboard Password**: For accessing the Traefik dashboard
+
+```
+Enter your email for Let's Encrypt notifications (or press Enter for admin@yourdomain.com):
+Enter password for Traefik dashboard (or press Enter to generate):
+```
+
+- Press Enter to automatically generate a secure password for the Traefik dashboard
+- Or enter your own password for the dashboard
+
+The Traefik dashboard can be accessed at `https://traefik.yourdomain.com` (production) or `http://traefik.localhost` (development) using the username `admin` and the password you configured.
+
+**API Keys**: For security reasons, API key fields are intentionally left empty in the generated `.env` file:
+- OpenAI API Key (for LightRAG service)
+- Qdrant API Key (for vector database authentication) 
+- N8N API Key (alternative to Personal Access Token)
+
+You must manually add your real API keys to the `.env` file after setup. Services that require these keys will not function until valid keys are provided.
 
 ## 📊 Management and Monitoring
 
@@ -185,7 +255,7 @@ CUDA_VISIBLE_DEVICES=0
 The kit includes enhanced management scripts with full N8N API integration:
 
 #### Credential Management
-```bash
+```
 # Enhanced credential management with pagination and API integration
 ./scripts/create_n8n_credential.sh --list --limit 50
 ./scripts/create_n8n_credential.sh --list --all  # Get all pages
@@ -196,10 +266,14 @@ The kit includes enhanced management scripts with full N8N API integration:
 # Create PostgreSQL credential
 ./scripts/create_n8n_credential.sh --type postgres --name "main-db" \
   --data '{"host":"postgres","port":5432,"database":"n8n","username":"user","password":"pass"}'
+
+# Automatic credential setup after deployment (wait 1-2 minutes after start.sh)
+./start.sh setup-credentials  # Uses enhanced Python credential manager
+./start.sh init-credentials   # Uses legacy bash credential setup
 ```
 
 #### Workflow Management
-```bash
+``bash
 # Complete workflow lifecycle management
 ./scripts/n8n-workflow-manager.sh --list --active
 ./scripts/n8n-workflow-manager.sh --activate workflow_123
@@ -209,7 +283,7 @@ The kit includes enhanced management scripts with full N8N API integration:
 ```
 
 #### Execution Monitoring
-```bash
+```
 # Real-time execution monitoring with advanced filtering
 ./scripts/n8n-execution-monitor.sh --watch
 ./scripts/n8n-execution-monitor.sh --stats
@@ -220,7 +294,7 @@ The kit includes enhanced management scripts with full N8N API integration:
 ```
 
 #### System Monitoring
-```bash
+```
 # Comprehensive system monitoring with security audit
 ./scripts/maintenance/monitor.sh                    # All checks
 ./scripts/maintenance/monitor.sh health             # Service health
@@ -230,7 +304,7 @@ The kit includes enhanced management scripts with full N8N API integration:
 ```
 
 #### Testing Infrastructure
-```bash
+```
 # Comprehensive testing with Playwright E2E
 ./scripts/run-comprehensive-tests.sh               # All tests
 ./scripts/run-comprehensive-tests.sh e2e           # End-to-end tests
@@ -239,7 +313,7 @@ The kit includes enhanced management scripts with full N8N API integration:
 ```
 
 #### Workflow Management
-```bash
+```
 # Complete workflow lifecycle management
 ./scripts/n8n-workflow-manager.sh --list --active
 ./scripts/n8n-workflow-manager.sh --health
@@ -247,7 +321,7 @@ The kit includes enhanced management scripts with full N8N API integration:
 ```
 
 #### Security Auditing
-```bash
+```
 # Integrated security monitoring
 ./scripts/maintenance/monitor.sh security
 ./scripts/maintenance/monitor.sh all  # includes security audit
@@ -279,7 +353,7 @@ The kit supports GPU acceleration for AI workloads with NVIDIA and AMD hardware:
 
 ### Automatic GPU Detection
 
-```bash
+```
 # Run GPU detection script
 ./scripts/detect-gpu.sh
 
@@ -316,7 +390,7 @@ When using the `gpu` profile, these services become available:
 
 ### Starting with GPU Support
 
-```bash
+```
 # Auto-detect and start with GPU
 ./start.sh --profile default,developer,gpu
 
@@ -331,7 +405,7 @@ docker logs n8n-gpu-monitor
 
 The GPU profile enables running local AI models:
 
-```bash
+```
 # Use local models instead of OpenAI API
 curl -X POST "http://localhost:8013/query" \
   -H "Content-Type: application/json" \
@@ -342,7 +416,7 @@ curl -X POST "http://localhost:8013/query" \
 
 Ollama provides easy local LLM deployment:
 
-```bash
+```
 # Check available models
 curl http://localhost:8013/models
 
@@ -368,7 +442,6 @@ curl -X POST "http://localhost:8013/models/pull?model_name=llama2:13b"
 - **Local model inference** without API costs
 - **Batch processing** of large document sets
 - **Real-time responses** for complex queries
-```
 
 ## 🛠️ Usage Guide
 
@@ -382,449 +455,102 @@ curl -X POST "http://localhost:8013/models/pull?model_name=llama2:13b"
 ./start.sh --detach
 
 # Start specific profiles
-./start.sh --profile default,monitoring
+./start.sh --profile default,developer,monitoring
 
-# Stop services
+# Stop all services
 ./start.sh down
 
-# Restart services
+# Restart all services
 ./start.sh restart
 
 # View service status
 ./start.sh status
 
-# Follow logs
+# View service logs
+./start.sh logs
 ./start.sh logs --follow n8n
 ```
 
-### Service Management
+### Post-Deployment Setup
 
-```bash
-# View real-time service status
-./start.sh status
+After starting services with `./start.sh`, the script will display:
 
-# Check system health
-./scripts/maintenance/monitor.sh health
+1. **Accessible Services**: List of all services with their URLs
+2. **Credential Setup Instructions**: How to automatically create credentials
+3. **Wait Time**: Recommendation to wait 1-2 minutes for services to initialize
 
-# View performance metrics
-./scripts/maintenance/monitor.sh performance
-
-# Analyze logs for errors
-./scripts/maintenance/monitor.sh logs --days 7
+To automatically create credentials for all services:
 ```
-
-### N8N Credential Management
-
-The kit includes powerful automated credential management for N8N:
-
-```bash
-# Automatic setup for all services during startup
-./start.sh up  # Credentials created automatically
-
-# Manual credential setup
+# Enhanced Python credential manager (recommended)
 ./start.sh setup-credentials
 
-# Advanced credential management
-python3 scripts/credential-manager.py --interactive
-
-# Automated setup for specific services
-./scripts/auto-setup-credentials.sh --services postgres,qdrant,openai
-
-# List existing credentials
-./scripts/create_n8n_credential.sh --list
+# Legacy bash credential setup
+./start.sh init-credentials
 ```
 
-**Supported Services:**
-- `postgres` - Main PostgreSQL database
-- `qdrant` - Vector database for AI embeddings
-- `openai` - OpenAI API for GPT models
-- `ollama` - Local LLM server
-- `redis` - Cache database
-- `neo4j` - Graph database
-- `clickhouse` - Analytics database
-- `grafana` - Monitoring dashboard
+Both methods will:
+- Create credentials for PostgreSQL, Qdrant, OpenAI, Ollama
+- Use configuration from your .env file
+- Skip creation if credentials already exist
 
-**Authentication Setup:**
-1. Start N8N: `./start.sh up`
-2. Open N8N: `https://n8n.localhost`
-3. Go to Settings → Personal Access Token
-4. Create token and add to `.env`: `N8N_PERSONAL_ACCESS_TOKEN=your-token`
-5. Run: `./start.sh setup-credentials`
+### Manual Credential Creation
 
-For detailed documentation, see [CREDENTIAL-MANAGEMENT.md](docs/CREDENTIAL-MANAGEMENT.md)
-
-### Document Processing
-
-Upload and process documents using the AI services:
-
+If you need to create credentials manually:
 ```bash
-# Upload document via API
-curl -X POST "http://localhost:8001/docs/upload" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@document.pdf"
+# Enhanced Python credential manager
+./scripts/credential-manager.py --help
 
-# Search documents with natural language
-curl -X POST "http://localhost:8001/docs/search" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "machine learning concepts", "limit": 5}'
+# Legacy bash credential setup
+./scripts/auto-setup-credentials.sh --help
+
+# Original credential creation script
+./scripts/create_n8n_credential.sh --help
 ```
 
-### LightRAG Knowledge Graph
-
-Use LightRAG for graph-based document analysis:
+### Environment Management
 
 ```bash
-# Ingest document into knowledge graph
-curl -X POST "http://localhost:8003/documents/ingest" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "content": "Your document content here...",
-    "metadata": {"source": "example.txt"},
-    "source": "example.txt"
-  }'
+# Regenerate environment file
+./scripts/setup.sh
 
-# Query the knowledge graph
-curl -X POST "http://localhost:8003/query" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What are the main concepts in the documents?",
-    "mode": "hybrid"
-  }'
+# Backup current environment
+cp .env .env.backup
 
-# Upload file to knowledge graph
-curl -X POST "http://localhost:8003/documents/ingest-file" \
-  -F "file=@document.txt"
+# Reset to default configuration
+rm .env && ./scripts/setup.sh
 ```
 
-### Backup and Restore
+### Monitoring and Maintenance
 
 ```bash
-# Create full backup
-./scripts/maintenance/backup.sh
-
-# Create backup of specific services
-./scripts/maintenance/backup.sh --services postgres,qdrant
-
-# List available backups
-./scripts/maintenance/restore.sh list
-
-# Restore from latest backup
-./scripts/maintenance/restore.sh latest
-
-# Restore specific backup
-./scripts/maintenance/restore.sh restore backup_20240101_120000.tar.gz
-```
-
-## 🔐 Security
-
-### Default Security Features
-
-- **Automatic TLS**: Let's Encrypt certificates via Traefik
-- **Secure Passwords**: Auto-generated strong passwords
-- **Network Isolation**: Services in isolated Docker network
-- **Security Headers**: HSTS, CSP, X-Frame-Options
-- **No Secrets in Code**: Template-based environment generation
-
-### Production Security Checklist
-
-- [ ] Change default domain from `localhost`
-- [ ] Configure proper DNS for your domain
-- [ ] Set up firewall rules (only ports 80, 443 exposed)
-- [ ] Enable N8N authentication
-- [ ] Set up backup encryption
-- [ ] Configure log rotation
-- [ ] Set up monitoring alerts
-- [ ] Review and rotate secrets regularly
-
-### Authentication
-
-N8N supports multiple authentication methods:
-
-```bash
-# Set Personal Access Token
-export N8N_PERSONAL_ACCESS_TOKEN="your-token-here"
-
-# Or use API Key
-export N8N_API_KEY="your-api-key-here"
-```
-
-## 📊 Monitoring
-
-### Grafana Dashboards
-
-Access Grafana at `https://grafana.localhost` with:
-- **Username**: `admin` 
-- **Password**: Check `.env` file for `GRAFANA_ADMIN_PASSWORD`
-
-Pre-configured dashboards include:
-- N8N workflow execution metrics
-- System resource monitoring  
-- Document processing analytics
-- Service health overview
-
-### Prometheus Metrics
-
-Direct access to metrics:
-- Prometheus: `http://localhost:9090`
-- Service metrics: `http://localhost:PORT/metrics`
-
-### Health Monitoring
-
-```bash
-# Complete health check
-./scripts/maintenance/monitor.sh
-
-# Check specific aspects
+# System health check
 ./scripts/maintenance/monitor.sh health
-./scripts/maintenance/monitor.sh performance  
-./scripts/maintenance/monitor.sh disk --threshold 90
-./scripts/maintenance/monitor.sh network
+
+# Security audit
+./scripts/maintenance/monitor.sh security
+
+# Performance metrics
+./scripts/maintenance/monitor.sh performance
+
+# Cleanup unused Docker resources
+./start.sh cleanup
 ```
-
-## 🧪 Development
-
-### Local Development Setup
-
-```bash
-# Start with development profile
-./start.sh --profile default,developer
-
-# Enable debug mode in services
-echo "DEBUG=true" >> .env
-./start.sh restart
-
-# Follow service logs
-./start.sh logs --follow document-processor
-```
-
-### Custom Service Development
-
-The kit supports custom FastAPI services. See `services/` directory for examples.
 
 ### Testing
 
 ```bash
-# Run comprehensive test suite
+# Run all tests
 ./scripts/run-comprehensive-tests.sh
 
-# Test specific components
-./scripts/run-comprehensive-tests.sh unit           # Unit tests
-./scripts/run-comprehensive-tests.sh integration   # Integration tests
-./scripts/run-comprehensive-tests.sh profiles      # Profile validation
-./scripts/run-comprehensive-tests.sh e2e           # End-to-end tests
-
-# Run service health checks
-./scripts/maintenance/monitor.sh health
-
-# Test document processing
-curl -X POST "http://localhost:8001/health"
-
-# Test web interface
-curl -X GET "http://localhost:8000/health"
-```
-
-#### Profile Testing
-
-The kit includes comprehensive testing for all Docker Compose deployment profiles:
-
-```bash
-# Test basic profile configurations
-./scripts/test-profiles.sh basic --dry-run
-
-# Test all possible profile combinations
-./scripts/test-profiles.sh extended --dry-run
-
-# Test GPU profiles (if GPU available)
-./scripts/test-profiles.sh gpu --verbose
-
-# Test production-recommended profiles
-./scripts/test-profiles.sh production
-
-# Test specific profile combination
-./scripts/test-profiles.sh custom "default,monitoring"
-
-# Test with actual service startup
-./scripts/test-profiles.sh basic --with-startup --timeout 300
-```
-
-**Profile validation includes:**
-- ✅ Docker Compose configuration validation
-- ✅ Service dependency checking
-- ✅ Health endpoint verification
-- ✅ Profile-specific requirements validation
-- ✅ Startup and shutdown testing
-
-📚 **Detailed Testing Guide**: See [`docs/PROFILE-TESTING.md`](docs/PROFILE-TESTING.md) for comprehensive testing documentation.
-
-#### Advanced Operations
-
-For production deployments, the kit includes advanced operational features:
-
-```bash
-# Advanced monitoring with alerting
-./scripts/advanced-monitor.sh start --daemon --webhook https://hooks.slack.com/...
-
-# Automated backup with encryption
-./scripts/backup-disaster-recovery.sh backup --verify --encrypt
-
-# Complete CI/CD pipeline testing
-./scripts/run-comprehensive-tests.sh all --verbose
-```
-
-**Advanced Features:**
-- 🚀 **CI/CD Integration**: GitHub Actions workflows for automated testing and deployment
-- 📊 **Advanced Monitoring**: Real-time metrics, alerting, and dashboard
-- 💾 **Disaster Recovery**: Comprehensive backup and restore capabilities
-- ⚡ **Performance Testing**: Automated load and stress testing with K6
-- 🔒 **Security Compliance**: Automated security auditing and compliance checks
-
-📚 **Advanced Operations Guide**: See [`docs/ADVANCED-OPERATIONS.md`](docs/ADVANCED-OPERATIONS.md) for comprehensive operational documentation.
-
-## 🌍 Deployment
-
-### Local Development
-
-```bash
-# Quick start for development
-./start.sh --profile default,developer
-```
-
-### VDS/Cloud Deployment
-
-1. **Setup Domain**: Configure DNS to point to your server
-2. **Update Environment**: Set `DOMAIN` and `ACME_EMAIL` in `.env`
-3. **Configure Firewall**: Allow ports 80 and 443
-4. **Start Services**:
-   ```bash
-   ./start.sh --profile default,developer,monitoring --detach
-   ```
-
-### Production Deployment
-
-1. **Security Review**: Complete the security checklist above
-2. **Backup Strategy**: Set up automated backups
-3. **Monitoring**: Configure alerts in Grafana
-4. **SSL/TLS**: Verify automatic certificate generation
-5. **Performance**: Monitor resource usage and scale as needed
-
-## 📁 Directory Structure
-
-```
-n8n-ai-starter-kit/
-├── docker-compose.yml          # Main composition file
-├── start.sh                    # Primary startup script
-├── template.env                # Environment template
-├── env.schema                  # Environment documentation
-├── scripts/                    
-│   ├── setup.sh               # Environment setup
-│   ├── create_n8n_credential.sh # Credential management
-│   └── maintenance/           
-│       ├── backup.sh          # Backup utilities
-│       ├── restore.sh         # Restore utilities
-│       └── monitor.sh         # Health monitoring
-├── services/                   # FastAPI microservices
-│   ├── web-interface/         # Management dashboard
-│   ├── document-processor/    # AI document processing
-│   ├── etl-processor/         # Data pipelines
-│   └── lightrag/              # Graph-based RAG system
-├── config/                     # Service configurations
-│   ├── grafana/               # Grafana setup
-│   ├── prometheus/            # Prometheus config
-│   ├── postgres/              # Database init scripts
-│   └── clickhouse/            # ClickHouse setup
-├── docs/                      # Additional documentation
-├── ai-instructions/           # AI agent instructions
-└── project.md                 # Technical overview
-```
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-#### Services Not Starting
-
-```bash
-# Check Docker daemon
-docker version
-
-# Check compose configuration
-docker compose config
-
-# View service logs
-./start.sh logs
-```
-
-#### SSL Certificate Issues
-
-```bash
-# Check Traefik logs
-./start.sh logs --follow traefik
-
-# Verify domain configuration
-echo $DOMAIN
-
-# Test ACME challenge endpoint
-curl -I http://your-domain.com/.well-known/acme-challenge/
-```
-
-#### Port Conflicts
-
-```bash
-# Check port usage
-netstat -tlnp | grep -E ":80|:443|:5678"
-
-# Stop conflicting services
-sudo systemctl stop nginx  # example
-```
-
-#### Permission Issues
-
-```bash
-# Fix script permissions
-chmod +x start.sh scripts/*.sh scripts/maintenance/*.sh
-
-# Check Docker permissions (Linux)
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-### Getting Help
-
-1. **Check Logs**: Always start with `./start.sh logs`
-2. **Service Status**: Use `./start.sh status` to see what's running
-3. **Health Check**: Run `./scripts/maintenance/monitor.sh`
-4. **Documentation**: Check `project.md` for technical details
-
-### Performance Optimization
-
-```bash
-# Monitor resource usage
-./scripts/maintenance/monitor.sh performance
-
-# Check disk usage
-./scripts/maintenance/monitor.sh disk
-
-# Optimize Docker
-docker system prune -f
-./start.sh cleanup
+# Run specific test types
+./scripts/run-comprehensive-tests.sh e2e
+./scripts/run-comprehensive-tests.sh api
+./scripts/run-comprehensive-tests.sh security
 ```
 
 ## 🤝 Contributing
 
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Make your changes** and test thoroughly
-4. **Commit changes**: `git commit -m 'Add amazing feature'`
-5. **Push to branch**: `git push origin feature/amazing-feature`
-6. **Open a Pull Request**
-
-### Development Guidelines
-
-- Follow existing code structure and patterns
-- Add comprehensive documentation for new features
-- Include health checks for new services
-- Update environment schema for new variables
-- Test on both Linux and Windows (Git Bash)
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ## 📄 License
 
@@ -832,18 +558,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- **[N8N](https://n8n.io/)** - Workflow automation platform
-- **[Qdrant](https://qdrant.tech/)** - Vector similarity search engine  
-- **[Traefik](https://traefik.io/)** - Modern reverse proxy
-- **[FastAPI](https://fastapi.tiangolo.com/)** - Modern Python web framework
-- **[SentenceTransformers](https://www.sbert.net/)** - State-of-the-art sentence embeddings
+- [N8N](https://n8n.io/) - Workflow automation engine
+- [Qdrant](https://qdrant.tech/) - Vector search database
+- [PostgreSQL](https://www.postgresql.org/) - Relational database with vector extensions
+- [Grafana](https://grafana.com/) - Analytics and monitoring platform
+- [Traefik](https://traefik.io/) - Modern reverse proxy
+- [Sentence Transformers](https://www.sbert.net/) - State-of-the-art sentence embeddings
+- [LightRAG](https://github.com/HKUDS/LightRAG) - Graph-based retrieval augmented generation
 
 ## 📞 Support
 
-- **Documentation**: Check `project.md` for technical details
-- **Issues**: Open an issue on GitHub for bugs or feature requests
-- **Discussions**: Use GitHub Discussions for questions and community support
-
----
-
-**Made with ❤️ for the automation and AI community**
+For issues, questions, or contributions, please:
+1. Check the [Documentation](docs/)
+2. Review existing [Issues](https://github.com/your-org/n8n-ai-starter-kit/issues)
+3. Create a new issue if needed

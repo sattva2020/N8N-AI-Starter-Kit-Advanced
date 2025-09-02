@@ -59,7 +59,7 @@ COMMANDS:
     init-credentials   Setup N8N credentials (legacy)
     
 OPTIONS:
-    --profile PROFILES  Comma-separated list of profiles (default,developer,monitoring,analytics)
+    --profile PROFILES  Comma-separated list of profiles (default,developer,monitoring,analytics,supabase)
     --detach           Run in detached mode (background)
     --build            Force rebuild of images
     --pull             Pull latest images before starting
@@ -82,7 +82,13 @@ PROFILES:
     monitoring  + Grafana, Prometheus
     analytics   + ETL Processor, ClickHouse
     gpu         + GPU-accelerated AI services with local models
+    supabase    + Supabase integration for AI/analytics data (hybrid approach)
 
+SECURITY:
+    The setup script prompts for:
+    - Domain name for service access
+    - Email for Let's Encrypt SSL certificates
+    - Password for Traefik dashboard access
 EOF
 }
 
@@ -135,7 +141,7 @@ check_environment() {
         print_info "Running setup script..."
         
         if [[ -x "$SCRIPT_DIR/setup.sh" ]]; then
-            "$SCRIPT_DIR/setup.sh" --non-interactive
+            "$SCRIPT_DIR/setup.sh"
         else
             print_error "Setup script not found or not executable"
             exit 1
@@ -151,6 +157,28 @@ check_environment() {
     else
         print_error "Failed to create environment file"
         exit 1
+    fi
+    
+    # Check if we're using localhost in what appears to be a production environment
+    if [[ "${DOMAIN:-localhost}" == "localhost" ]]; then
+        print_warning "Currently using localhost as domain"
+        print_info "For production deployments, you should use a real domain name"
+        # Only prompt if running in interactive mode (not in CI/CD)
+        if [[ -t 0 ]]; then
+            echo
+            read -p "Would you like to update the domain now? (y/N): " update_domain
+            if [[ "$update_domain" =~ ^[Yy]$ ]]; then
+                print_info "Running setup script to configure domain..."
+                if [[ -x "$SCRIPT_DIR/setup.sh" ]]; then
+                    "$SCRIPT_DIR/setup.sh"
+                    # Reload environment after setup
+                    set -a
+                    source "$ENV_FILE"
+                    set +a
+                    print_success "Environment reloaded with new settings"
+                fi
+            fi
+        fi
     fi
     
     # Validate critical environment variables
@@ -220,6 +248,7 @@ start_services() {
     if [[ "$DETACHED" == "true" ]]; then
         print_success "Services started in background"
         show_service_urls
+        show_access_instructions
         print_info "Use '$0 logs' to view logs or '$0 status' to check status"
     fi
 }
@@ -406,11 +435,11 @@ init_credentials() {
             "$cred_script" --type postgres --name "Main PostgreSQL" --data '{
                 "host": "postgres",
                 "port": 5432,
-                "database": "n8n",
-                "username": "n8n_user",
-                "password": "${POSTGRES_PASSWORD}",
-                "ssl": "disable"
-            }' || print_warning "Failed to create PostgreSQL credential"
+                    "database": "n8n",
+                    "username": "n8n_user",
+                    "password": "${POSTGRES_PASSWORD}",
+                    "ssl": "disable"
+                }' || print_warning "Failed to create PostgreSQL credential"
         fi
     fi
     
@@ -487,6 +516,42 @@ show_service_urls() {
         print_warning "Using localhost - services available via HTTP only"
         print_info "For HTTPS, set a proper domain in .env and configure DNS"
     fi
+}
+
+# Function to show access instructions
+show_access_instructions() {
+    echo
+    print_header "Access Instructions"
+    
+    echo "📋 Services you can access:"
+    echo "   • N8N Workflow Engine - Main workflow automation platform"
+    echo "   • Grafana Dashboard - System monitoring and metrics visualization"
+    echo "   • Web Interface - API gateway and management dashboard"
+    echo "   • Traefik Dashboard - Reverse proxy and load balancer monitoring"
+    echo "   • Qdrant - Vector database for similarity search (if enabled)"
+    echo "   • PostgreSQL - Main database for N8N (internal use)"
+    
+    echo
+    echo "🔐 Automatic Credential Creation:"
+    echo "   After services are fully running (wait 1-2 minutes), you can automatically"
+    echo "   create credentials for all services using one of these methods:"
+    echo
+    echo "   Method 1 - Enhanced Python credential manager (recommended):"
+    echo "   $ $0 setup-credentials"
+    echo
+    echo "   Method 2 - Legacy bash credential setup:"
+    echo "   $ $0 init-credentials"
+    echo
+    echo "   Both methods will:"
+    echo "   • Create credentials for PostgreSQL, Qdrant, OpenAI, Ollama"
+    echo "   • Use configuration from your .env file"
+    echo "   • Skip creation if credentials already exist"
+    echo
+    echo "   🔧 Manual credential creation (if needed):"
+    echo "   $ ./scripts/create_n8n_credential.sh --help"
+    echo
+    print_info "First access: Visit N8N at the URL above and use default credentials"
+    print_info "Default N8N credentials are in your .env file (N8N_USER/N8N_PASSWORD)"
 }
 
 # Function to health check services
